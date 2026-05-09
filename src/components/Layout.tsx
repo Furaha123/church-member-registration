@@ -4,28 +4,13 @@ export type Route = 'welcome' | 'register' | 'directory';
 
 export function Logo({ size = 52 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden="true">
-      <defs>
-        <radialGradient id="lg-glow" cx="50%" cy="40%" r="60%">
-          <stop offset="0%" stopColor="#f0cd6a" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#0a1628" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id="lg-gold" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#f0cd6a" />
-          <stop offset="100%" stopColor="#d4a017" />
-        </linearGradient>
-      </defs>
-      <circle cx="32" cy="32" r="30" fill="url(#lg-glow)" />
-      <circle cx="32" cy="36" r="14" fill="none" stroke="#d4a017" strokeWidth="0.8" opacity="0.5" />
-      <ellipse cx="32" cy="36" rx="6" ry="14" fill="none" stroke="#d4a017" strokeWidth="0.6" opacity="0.4" />
-      <line x1="18" y1="36" x2="46" y2="36" stroke="#d4a017" strokeWidth="0.6" opacity="0.4" />
-      <path d="M16 24 Q22 20 28 22 Q26 18 30 16 Q34 18 32 22 Q40 22 44 28 L40 30 L36 27 Q34 31 30 32 Q24 33 18 30 Z" fill="url(#lg-gold)" opacity="0.85" />
-      <circle cx="29" cy="20" r="0.8" fill="#0a1628" />
-      <rect x="30.5" y="30" width="3" height="20" fill="url(#lg-gold)" />
-      <rect x="26" y="34" width="12" height="3" fill="url(#lg-gold)" />
-      <path d="M14 50 Q14 46 18 46 L46 46 Q50 46 50 50 Q50 54 46 54 L18 54 Q14 54 14 50 Z" fill="#0a1628" stroke="#d4a017" strokeWidth="0.8" />
-      <line x1="20" y1="50" x2="40" y2="50" stroke="#d4a017" strokeWidth="0.6" opacity="0.7" />
-    </svg>
+    <img
+      src="/logo.png"
+      alt="Eglise Vivante"
+      width={size}
+      height={size}
+      style={{ objectFit: 'contain', mixBlendMode: 'screen' }}
+    />
   );
 }
 
@@ -100,7 +85,6 @@ export function AppHeader({ route, setRoute, showTabs = true }: AppHeaderProps) 
           )}
         </div>
 
-        <Clock />
       </div>
     </header>
   );
