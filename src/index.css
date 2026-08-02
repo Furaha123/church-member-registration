@@ -82,7 +82,7 @@ html, body {
   margin: 0 auto;
   padding: 18px 32px;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 28px;
 }
