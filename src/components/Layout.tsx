@@ -84,7 +84,7 @@ export function AppHeader({ route, setRoute, showTabs = true, userName, onLogout
                 Register
               </button>
               <button className={'nav-tab' + (route === 'directory' ? ' active' : '')} onClick={() => setRoute('directory')}>
-                Directory
+                Members
               </button>
             </nav>
           )}

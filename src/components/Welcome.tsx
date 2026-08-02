@@ -115,7 +115,7 @@ export function Welcome({
               style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
               onClick={onEnter}
             >
-              View Directory
+              View All Members
               <Icon name="arrow" size={14} />
             </button>
           </>

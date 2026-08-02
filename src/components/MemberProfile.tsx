@@ -158,7 +158,7 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
   return (
     <div>
       <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ marginBottom: 20 }}>
-        ← Back to Directory
+        ← Back to Members
       </button>
 
       <div className="card">
