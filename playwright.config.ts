@@ -15,6 +15,9 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',
+    // Every test gets a screenshot attached to the HTML report (not just
+    // failures) — run `npx playwright show-report` after a run to view them.
+    screenshot: 'on',
   },
 
   projects: [
