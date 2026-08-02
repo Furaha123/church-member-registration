@@ -31,7 +31,6 @@ interface FormState {
   employed: '' | 'yes' | 'no';
   mobile_tel: string;
   email: string;
-  fax_number: string;
   province_id: number | '';
   district_id: number | '';
   sector_id: number | '';
@@ -49,6 +48,11 @@ interface FormState {
   spiritualGiftOther: string;
   occupationOther: string;
 }
+
+// Backend only enforces `string` + `max:20` on mobile_tel (Store/UpdateMemberRequest) —
+// no format rule — so this is a frontend-only guard against typing plain text
+// (e.g. lorem-ipsum placeholder data) into a phone number field.
+const PHONE_PATTERN = /^[0-9+\-\s()]+$/;
 
 const STEPS = [
   { id: 1, label: 'Personal' },
@@ -87,7 +91,6 @@ function initialFormState(member?: Member): FormState {
     employed: member?.employed === true ? 'yes' : member?.employed === false ? 'no' : '',
     mobile_tel: member?.mobile_tel ?? '',
     email: member?.email ?? '',
-    fax_number: member?.fax_number ?? '',
     province_id: member?.province_id ?? '',
     district_id: member?.district_id ?? '',
     sector_id: member?.sector_id ?? '',
@@ -121,7 +124,6 @@ function toPayload(form: FormState): MemberPayload {
   if (form.department.length > 0) payload.department = form.department;
   if (form.mobile_tel.trim()) payload.mobile_tel = form.mobile_tel.trim();
   if (form.email.trim()) payload.email = form.email.trim();
-  if (form.fax_number.trim()) payload.fax_number = form.fax_number.trim();
   if (form.province_id) payload.province_id = Number(form.province_id);
   if (form.district_id) payload.district_id = Number(form.district_id);
   if (form.sector_id) payload.sector_id = Number(form.sector_id);
@@ -205,13 +207,15 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
 
   const isEditing = Boolean(member);
   const isMarried = MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name === 'MARRIED';
+  const mobileValid = form.mobile_tel.trim() === '' || PHONE_PATTERN.test(form.mobile_tel.trim());
   const canSubmit =
     form.first_name.trim().length > 0 &&
     form.last_name.trim().length > 0 &&
     form.sex_id !== '' &&
     form.marital_status_id !== '' &&
     form.talent.length > 0 &&
-    form.spiritual_gift.length > 0;
+    form.spiritual_gift.length > 0 &&
+    mobileValid;
 
   async function handleSubmit() {
     if (!canSubmit || submitting) return;
@@ -383,20 +387,22 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
         <>
           <SectionTitle>Contact &amp; Location</SectionTitle>
           <div className="form-grid">
-            <Field label="Mobile Telephone" span={4}>
+            <Field label="Mobile Telephone" span={5}>
               <div className="input-with-icon">
                 <span className="ico"><Icon name="phone" size={14} /></span>
                 <Inp value={form.mobile_tel} onChange={(v) => set('mobile_tel', v)} placeholder="+250 …" />
               </div>
+              {!mobileValid && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
+                  Numbers only — digits, spaces, and +, -, ( ) are allowed, no letters.
+                </div>
+              )}
             </Field>
-            <Field label="E-mail Address" span={5}>
+            <Field label="E-mail Address" span={7}>
               <div className="input-with-icon">
                 <span className="ico"><Icon name="mail" size={14} /></span>
                 <Inp type="email" value={form.email} onChange={(v) => set('email', v)} />
               </div>
-            </Field>
-            <Field label="Fax Number" span={3}>
-              <Inp value={form.fax_number} onChange={(v) => set('fax_number', v)} placeholder="optional" />
             </Field>
 
             <div className="field field-col-12"><SectionTitle>Address</SectionTitle></div>
@@ -521,6 +527,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 <div className="state-banner info">
                   First name, last name, sex, marital status, at least one talent, and at least one spiritual gift
                   are required before this can be submitted.
+                  {!mobileValid && ' The mobile number also has letters in it — numbers only.'}
                 </div>
               </div>
             )}

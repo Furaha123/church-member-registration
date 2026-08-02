@@ -185,7 +185,6 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
             <div className="section-title"><h3>Contact</h3></div>
             <DetailRow label="Mobile" value={member.mobile_tel ?? ''} />
             <DetailRow label="Email" value={member.email ?? ''} />
-            <DetailRow label="Fax" value={member.fax_number ?? ''} />
           </div>
 
           <div>

@@ -32,7 +32,6 @@ export interface MemberPayload {
 
   mobile_tel?: string;
   email?: string;
-  fax_number?: string;
 
   province_id?: number;
   district_id?: number;
@@ -68,7 +67,6 @@ export interface Member {
   employed: boolean | null;
   fathers_name: string | null;
   mothers_name: string | null;
-  fax_number: string | null;
   sex_id: number;
   marital_status_id: number;
   occupations: NamedLookup[];
