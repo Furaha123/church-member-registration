@@ -1,12 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { login, fieldInput, checkFirstOption } from './helpers';
+import { fieldInput, checkFirstOption } from './helpers';
 
-// Needs the live, seeded backend (see login.spec.ts for setup). Walks the full
-// 4-step registration wizard end to end and screenshots each step.
+// Runs in the 'chromium-authenticated' project (see playwright.config.ts),
+// which reuses the storageState saved by e2e/auth.setup.ts instead of
+// logging in itself. Walks the full 4-step registration wizard end to end
+// and screenshots each step.
 
 test.describe('Register a new member (requires a live, seeded backend)', () => {
   test('completes the wizard and lands on the new member\'s profile', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
     await expect(page.getByText(/Welcome back,/)).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Register New Member' }).click();
@@ -39,7 +41,9 @@ test.describe('Register a new member (requires a live, seeded backend)', () => {
 
     // ── Step 4: Review & submit ───────────────────────────────────────────
     await expect(page.getByRole('heading', { name: 'Review & Confirm' })).toBeVisible();
-    await expect(page.getByText(firstName)).toBeVisible();
+    // firstName also appears in the form-nav's ".meta" footer, so this must
+    // be scoped to the review summary grid specifically (not just any match).
+    await expect(page.getByText(firstName).first()).toBeVisible();
     await page.screenshot({ path: 'e2e/screenshots/register-04-review.png', fullPage: true });
 
     const submit = page.getByRole('button', { name: 'Submit Registration' });

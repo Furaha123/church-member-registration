@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { login, fieldInput, checkFirstOption } from './helpers';
+import { fieldInput, checkFirstOption } from './helpers';
 
-// Needs the live, seeded backend to reach the register form (it's behind
-// auth:sanctum), but never actually submits — purely exercises the frontend
+// Runs in the 'chromium-authenticated' project (reuses the storageState from
+// e2e/auth.setup.ts). Never actually submits — purely exercises the frontend
 // mobile-number validation added alongside the fax_number cleanup.
 
 test.describe('Mobile number validation (requires a live, seeded backend)', () => {
   test('rejects letters in the mobile number and blocks submission', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
     await expect(page.getByText(/Welcome back,/)).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Register New Member' }).click();

@@ -3,6 +3,9 @@ import type { Page } from '@playwright/test';
 export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'bumwejaychris@gmail.com';
 export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'ChangeMe123!';
 
+/** Where auth.setup.ts saves the pre-authenticated storageState. */
+export const authFile = 'e2e/.auth/admin.json';
+
 export async function login(page: Page, email = ADMIN_EMAIL, password = ADMIN_PASSWORD): Promise<void> {
   await page.goto('/');
   await page.getByPlaceholder('you@church.org').fill(email);
