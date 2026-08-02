@@ -44,7 +44,7 @@ export function App() {
       <>
         <div className="app-bg" />
         <div className="app-shell">
-          <AppHeader route="welcome" setRoute={() => {}} showTabs={false} />
+          <AppHeader setRoute={() => {}} />
           <Welcome
             onEnter={() => setRoute('directory')}
             onRegisterNew={() => setRoute('register')}
@@ -67,7 +67,7 @@ export function App() {
       <div className="app-shell">
         {route === 'welcome' ? (
           <>
-            <AppHeader route={route} setRoute={setRoute} showTabs={false} userName={user?.name} onLogout={handleLogout} />
+            <AppHeader setRoute={setRoute} userName={user?.name} onLogout={handleLogout} />
             <Welcome
               onEnter={() => setRoute('directory')}
               onRegisterNew={() => setRoute('register')}
@@ -82,7 +82,7 @@ export function App() {
           </>
         ) : (
           <>
-            <AppHeader route={route} setRoute={setRoute} userName={user?.name} onLogout={handleLogout} />
+            <AppHeader setRoute={setRoute} userName={user?.name} onLogout={handleLogout} />
             <main className="page">
               {route === 'directory' && (
                 <MemberList

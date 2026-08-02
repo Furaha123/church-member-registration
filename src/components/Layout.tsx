@@ -55,14 +55,12 @@ export function Clock() {
 }
 
 interface AppHeaderProps {
-  route: Route;
   setRoute: (r: Route) => void;
-  showTabs?: boolean;
   userName?: string;
   onLogout?: () => void;
 }
 
-export function AppHeader({ route, setRoute, showTabs = true, userName, onLogout }: AppHeaderProps) {
+export function AppHeader({ setRoute, userName, onLogout }: AppHeaderProps) {
   return (
     <header className="app-header">
       <div className="app-header-inner">
@@ -78,16 +76,6 @@ export function AppHeader({ route, setRoute, showTabs = true, userName, onLogout
           <span className="ornament">✦</span>
           Database of Church Members
           <span className="ornament">✦</span>
-          {showTabs && (
-            <nav className="nav-tabs">
-              <button className={'nav-tab' + (route === 'register' ? ' active' : '')} onClick={() => setRoute('register')}>
-                Register
-              </button>
-              <button className={'nav-tab' + (route === 'directory' ? ' active' : '')} onClick={() => setRoute('directory')}>
-                Members
-              </button>
-            </nav>
-          )}
         </div>
 
         {onLogout && (
