@@ -1,66 +1,58 @@
-import { useState, useEffect, useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import type { Member, MemberFormData } from '../types/member';
-
-const STORAGE_KEY = 'church_members';
-
-function loadFromStorage(): Member[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Member[]) : [];
-  } catch (error) {
-    console.warn('Failed to load members from storage:', error);
-    return [];
-  }
-}
-
-function saveToStorage(members: Member[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
-  } catch (error) {
-    console.warn('Failed to save members to storage:', error);
-  }
-}
+import { useCallback, useEffect, useState } from 'react';
+import { getMembers, createMember, updateMember } from '../api/members';
+import type { Member, MemberPayload } from '../types/member';
 
 interface UseMembersReturn {
   members: Member[];
-  addMember: (data: MemberFormData) => Member;
-  updateMember: (id: string, data: MemberFormData) => void;
-  deleteMember: (id: string) => void;
-  getMemberById: (id: string) => Member | undefined;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  addMember: (data: MemberPayload) => Promise<Member>;
+  editMember: (id: number, data: MemberPayload) => Promise<Member>;
+  getMemberById: (id: number) => Member | undefined;
 }
 
-export function useMembers(): UseMembersReturn {
-  const [members, setMembers] = useState<Member[]>(loadFromStorage);
+export function useMembers(enabled: boolean = true): UseMembersReturn {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getMembers();
+      setMembers(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load members.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    saveToStorage(members);
-  }, [members]);
+    // Every member endpoint sits behind auth:sanctum, so don't fire until
+    // there's a signed-in session (e.g. before login, or right after logout).
+    if (!enabled) return;
+    void refresh();
+  }, [enabled, refresh]);
 
-  const addMember = useCallback((data: MemberFormData): Member => {
-    const newMember: Member = {
-      ...data,
-      id: uuidv4(),
-      dateJoined: new Date().toISOString().split('T')[0],
-    };
-    setMembers((prev) => [newMember, ...prev]);
-    return newMember;
+  const addMember = useCallback(async (data: MemberPayload): Promise<Member> => {
+    const created = await createMember(data);
+    setMembers((prev) => [created, ...prev]);
+    return created;
   }, []);
 
-  const updateMember = useCallback((id: string, data: MemberFormData): void => {
-    setMembers((prev) =>
-      prev.map((member) => (member.id === id ? { ...member, ...data } : member)),
-    );
-  }, []);
-
-  const deleteMember = useCallback((id: string): void => {
-    setMembers((prev) => prev.filter((member) => member.id !== id));
+  const editMember = useCallback(async (id: number, data: MemberPayload): Promise<Member> => {
+    const updated = await updateMember(id, data);
+    setMembers((prev) => prev.map((m) => (m.id === id ? updated : m)));
+    return updated;
   }, []);
 
   const getMemberById = useCallback(
-    (id: string): Member | undefined => members.find((m) => m.id === id),
+    (id: number): Member | undefined => members.find((m) => m.id === id),
     [members],
   );
 
-  return { members, addMember, updateMember, deleteMember, getMemberById };
+  return { members, loading, error, refresh, addMember, editMember, getMemberById };
 }

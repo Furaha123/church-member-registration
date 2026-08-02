@@ -1,133 +1,86 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Member } from '../types/member';
 import { Icon } from './Layout';
-import { SAMPLE_MEMBERS } from '../data/constants';
+import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS } from '../data/constants';
 
 interface DirectoryProps {
   members: Member[];
+  loading: boolean;
+  error: string | null;
   onNewMember: () => void;
+  onViewMember: (id: number) => void;
+  onEditMember: (id: number) => void;
 }
 
-const FILTERS = ['All', 'Pastors', 'Cell Leaders', 'Choir', 'Youth', 'Mothers', 'Fathers'];
-
-type SampleMember = typeof SAMPLE_MEMBERS[number];
-type AnyMember = Member | SampleMember;
-
-function isSample(m: AnyMember): m is SampleMember {
-  return 'ministry' in m && 'responsibility' in m;
+function lookupName(options: { id: number; name: string }[], id: number | null): string {
+  if (id === null) return '—';
+  return options.find((o) => o.id === id)?.name ?? '—';
 }
 
-function getMinistry(m: AnyMember): string {
-  if (isSample(m)) return m.ministry;
-  return (m as Member).department ?? '';
+function initials(m: Member): string {
+  return (m.first_name?.[0] ?? '') + (m.last_name?.[0] ?? '');
 }
 
-function getResponsibility(m: AnyMember): string {
-  if (isSample(m)) return m.responsibility;
-  return '';
+function namesOf(list: { name: string }[]): string {
+  return list.length > 0 ? list.map((l) => l.name).join(', ') : '—';
 }
 
-function matchesFilter(m: AnyMember, filter: string): boolean {
-  if (filter === 'All') return true;
-  const ministry = getMinistry(m);
-  const resp = getResponsibility(m);
-  if (filter === 'Pastors') return resp.includes('Pastor') || ministry === 'Pastor';
-  if (filter === 'Cell Leaders') return resp === 'Cell Leader' || resp === 'Zone Leader';
-  if (filter === 'Choir') return resp.includes('Choir') || resp === 'Worship Leader';
-  if (filter === 'Youth') return ministry === 'Youth Department';
-  if (filter === 'Mothers') return ministry === "Mothers' Department";
-  if (filter === 'Fathers') return ministry === "Fathers' Department";
-  return true;
-}
-
-function initials(m: AnyMember): string {
-  return (m.firstName?.[0] ?? '') + (m.lastName?.[0] ?? '');
-}
-
-function ageFromDob(dob: string): string {
-  if (!dob) return '—';
-  return String(new Date().getFullYear() - new Date(dob).getFullYear());
-}
-
-function yearsFrom(date: string): string {
-  if (!date) return '—';
-  return String(new Date().getFullYear() - new Date(date).getFullYear());
-}
-
-export function MemberList({ members, onNewMember }: DirectoryProps) {
+export function MemberList({ members, loading, error, onNewMember, onViewMember, onEditMember }: DirectoryProps) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
 
-  const combined: AnyMember[] = [
-    ...SAMPLE_MEMBERS,
-    ...members.filter(m => !SAMPLE_MEMBERS.some(s => s.id === m.id)),
-  ];
+  const departmentFilters = useMemo(() => {
+    const names = new Set<string>();
+    members.forEach((m) => m.departments.forEach((d) => names.add(d.name)));
+    return ['All', ...Array.from(names).sort()];
+  }, [members]);
 
-  const visible = combined.filter(m => {
-    if (!matchesFilter(m, filter)) return false;
+  const visible = members.filter((m) => {
+    if (filter !== 'All' && !m.departments.some((d) => d.name === filter)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
-    const ministry = getMinistry(m);
-    const resp = getResponsibility(m);
-    const id = isSample(m) ? m.id : m.id;
-    return [m.firstName, m.lastName, id, ministry, resp].some(f => f?.toLowerCase().includes(q));
+    const haystack = [
+      m.first_name,
+      m.last_name,
+      m.mobile_tel ?? '',
+      m.email ?? '',
+      ...m.departments.map((d) => d.name),
+      ...m.talents.map((t) => t.name),
+    ];
+    return haystack.some((f) => f?.toLowerCase().includes(q));
   });
 
   return (
     <>
-      <div className="directory-stats">
-        <div className="stat-card">
-          <div className="lbl">Total Members</div>
-          <div className="num">{combined.length + 1279}</div>
-          <div className="delta">+ {members.length} registered here</div>
-        </div>
-        <div className="stat-card">
-          <div className="lbl">Active Cells</div>
-          <div className="num">47</div>
-          <div className="delta">across 3 districts</div>
-        </div>
-        <div className="stat-card">
-          <div className="lbl">Baptisms · 2026</div>
-          <div className="num">18</div>
-          <div className="delta">last on Apr 12</div>
-        </div>
-        <div className="stat-card">
-          <div className="lbl">Pending Registrations</div>
-          <div className="num">{Math.max(0, members.length)}</div>
-          <div className="delta">awaiting review</div>
-        </div>
-      </div>
-
-      <div className="card" style={{ padding: '28px 32px' }}>
-        <div className="card-header" style={{ marginBottom: 24, paddingBottom: 20 }}>
+      <div className="card">
+        <div className="card-header">
           <div>
-            <div className="eyebrow">The Living Register</div>
+            <div className="eyebrow">Members</div>
             <h2 className="card-title">Member Directory</h2>
             <div className="card-sub">
-              Showing <strong style={{ color: 'var(--gold-300)' }}>{visible.length}</strong> of {combined.length} members enrolled.
+              Showing <strong style={{ color: 'var(--gold-300)' }}>{visible.length}</strong> of {members.length} members enrolled.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-outline btn-sm">
-              <Icon name="download" size={12} /> Export
-            </button>
             <button className="btn btn-primary btn-sm" onClick={onNewMember}>
               <Icon name="plus" size={12} /> New Member
             </button>
           </div>
         </div>
 
+        {error && <div className="state-banner error">Couldn't load members: {error}</div>}
+
         <div className="directory-toolbar">
           <div className="search">
             <span className="ico"><Icon name="search" size={16} /></span>
             <input
-              placeholder="Search by name, ID, cell, or ministry…"
+              placeholder="Search by name, mobile, email, department, or talent…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <div className="filter-pills">
-            {FILTERS.map(f => (
+            {departmentFilters.map((f) => (
               <button key={f} className={'pill' + (filter === f ? ' active' : '')} onClick={() => setFilter(f)}>
                 {f}
               </button>
@@ -135,69 +88,81 @@ export function MemberList({ members, onNewMember }: DirectoryProps) {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table className="member-table">
-            <thead>
-              <tr>
-                <th>Member</th>
-                <th>Sex / Age</th>
-                <th>Cell</th>
-                <th>Ministry</th>
-                <th>Responsibility</th>
-                <th>Years</th>
-                <th style={{ textAlign: 'right' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map(m => {
-                const ministry = getMinistry(m);
-                const resp = getResponsibility(m);
-                const dob = isSample(m) ? m.dob : (m as Member).dateOfBirth;
-                const memberSince = isSample(m) ? m.memberSince : (m as Member).dateJoined;
-                const sex = isSample(m) ? m.sex : (m as Member).gender;
-                const marital = isSample(m) ? m.marital : (m as Member).maritalStatus;
-                const cell = isSample(m) ? m.cell : '';
-                const sector = isSample(m) ? m.sector : (m as Member).city;
-                return (
+        {loading ? (
+          <div className="checklist-empty">Loading members…</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="member-table">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th>Gender / Marital Status</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Departments</th>
+                  <th>Employed</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((m) => (
                   <tr key={m.id}>
                     <td>
                       <div className="member-cell">
                         <div className="avatar">{initials(m)}</div>
                         <div>
-                          <div className="name">{m.firstName} {m.lastName}</div>
-                          <div className="id-num">{m.id}</div>
+                          <div className="name">{m.first_name} {m.last_name}</div>
+                          <div className="id-num">#{m.id}</div>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <div style={{ color: 'var(--cream)' }}>{sex}</div>
-                      <div style={{ fontSize: 11, color: 'var(--cream-faint)', letterSpacing: '0.08em' }}>
-                        {ageFromDob(dob)} yrs · {marital}
+                      <div style={{ color: 'var(--cream)' }}>{lookupName(SEX_OPTIONS, m.sex_id)}</div>
+                      <div style={{ fontSize: 12, color: 'var(--cream-faint)' }}>
+                        {lookupName(MARITAL_STATUS_OPTIONS, m.marital_status_id)}
                       </div>
                     </td>
+                    <td>{m.email || '—'}</td>
+                    <td>{m.mobile_tel || '—'}</td>
+                    <td><span className="tag gold">{namesOf(m.departments)}</span></td>
                     <td>
-                      <div>{cell || '—'}</div>
-                      <div style={{ fontSize: 11, color: 'var(--cream-faint)' }}>{sector}</div>
+                      <span className={'tag ' + (m.employed ? 'green' : '')}>{m.employed === null ? '—' : m.employed ? 'Yes' : 'No'}</span>
                     </td>
-                    <td><span className="tag gold">{ministry || '—'}</span></td>
-                    <td><span className="tag blue">{resp || '—'}</span></td>
-                    <td style={{ fontFamily: 'Cinzel, serif', color: 'var(--gold-300)' }}>
-                      {yearsFrom(memberSince)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span className="tag green">✓ Active</span>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => onViewMember(m.id)}
+                          aria-label={`View ${m.first_name} ${m.last_name}`}
+                          title="View details"
+                        >
+                          <Icon name="eye" size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn accent"
+                          onClick={() => onEditMember(m.id)}
+                          aria-label={`Edit ${m.first_name} ${m.last_name}`}
+                          title="Edit member"
+                        >
+                          <Icon name="edit" size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--line)', fontSize: 11, color: 'var(--cream-faint)', letterSpacing: '0.18em', textTransform: 'uppercase', fontFamily: 'Cinzel, serif' }}>
-          <span>Page 1 of 161</span>
-          <span>1,284 souls · last sync today</span>
-        </div>
+                ))}
+                {visible.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
+                      No members match your search.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </>
   );

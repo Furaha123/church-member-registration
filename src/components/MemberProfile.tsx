@@ -1,169 +1,224 @@
-import { useState } from 'react';
-import type { Member, MemberFormData, MembershipStatus } from '../types/member';
-import { MemberForm } from './MemberForm';
+import { useEffect, useState } from 'react';
+import type { Member } from '../types/member';
+import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
+import {
+  getDistrictsForProvince,
+  getSectorsForDistrict,
+  getCellulesForSector,
+  getVillagesForCellule,
+  getProvinces,
+} from '../api/lookups';
 
 interface MemberProfileProps {
   member: Member;
-  onUpdate: (id: string, data: MemberFormData) => void;
-  onDelete: (id: string) => void;
+  onEdit: () => void;
   onBack: () => void;
 }
 
-const STATUS_COLORS: Record<MembershipStatus, string> = {
-  active: 'bg-green-100 text-green-700 border-green-200',
-  inactive: 'bg-gray-100 text-gray-600 border-gray-200',
-  visitor: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-};
+function lookupName(options: { id: number; name: string }[], id: number | null): string {
+  if (id === null) return '—';
+  return options.find((o) => o.id === id)?.name ?? '—';
+}
 
 function getInitials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-function formatDate(iso: string): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
 interface DetailRowProps {
   label: string;
-  value: string | boolean;
+  value: string;
 }
 
 function DetailRow({ label, value }: DetailRowProps) {
-  const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value || '—';
   return (
-    <div className="flex justify-between py-2 border-b border-gray-50 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm text-gray-800 font-medium text-right max-w-[60%]">{display}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+      <span style={{ fontSize: 13, color: 'var(--cream-faint)' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--cream)', fontWeight: 600, textAlign: 'right', maxWidth: '60%' }}>{value || '—'}</span>
     </div>
   );
 }
 
-export function MemberProfile({ member, onUpdate, onDelete, onBack }: MemberProfileProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+interface TagGroupProps {
+  label: string;
+  items: { id: number; name: string }[];
+  tone?: 'gold' | 'blue' | 'neutral';
+}
 
-  function handleUpdate(data: MemberFormData) {
-    onUpdate(member.id, data);
-    setIsEditing(false);
-  }
+function TagGroup({ label, items, tone = 'neutral' }: TagGroupProps) {
+  const tagClass = tone === 'neutral' ? 'tag' : `tag ${tone}`;
+  return (
+    <div style={{ paddingTop: 16, paddingBottom: 16, borderBottom: '1px solid var(--line)' }}>
+      <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 10 }}>{label}</div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 14, color: 'var(--cream-faint)' }}>—</div>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {items.map((item) => (
+            <span key={item.id} className={tagClass}>{item.name}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  if (isEditing) {
-    return (
-      <div>
-        <button onClick={() => setIsEditing(false)} className="mb-4 text-sm text-church-600 hover:underline">
-          ← Back to Profile
-        </button>
-        <MemberForm onSubmit={handleUpdate} onCancel={() => setIsEditing(false)} />
-      </div>
-    );
-  }
+interface PairedGroupProps {
+  label: string;
+  parents: { id: number; name: string }[];
+  childrenOf: (parentId: number) => { id: number; name: string }[];
+  tone?: 'gold' | 'blue' | 'neutral';
+}
+
+// Renders each parent (an education level, a department) with the specific
+// children a member paired it with (that education's faculties, that
+// department's responsibilities) nested underneath — using the education_id /
+// department_id now exposed on faculties/church_responsibilities by the API.
+function PairedGroup({ label, parents, childrenOf, tone = 'neutral' }: PairedGroupProps) {
+  const tagClass = tone === 'neutral' ? 'tag' : `tag ${tone}`;
+  return (
+    <div style={{ paddingTop: 16, paddingBottom: 16, borderBottom: '1px solid var(--line)' }}>
+      <div style={{ fontSize: 13, color: 'var(--cream-faint)', marginBottom: 10 }}>{label}</div>
+      {parents.length === 0 ? (
+        <div style={{ fontSize: 14, color: 'var(--cream-faint)' }}>—</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {parents.map((parent) => {
+            const kids = childrenOf(parent.id);
+            return (
+              <div key={parent.id}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--cream)', marginBottom: kids.length > 0 ? 6 : 0 }}>
+                  {parent.name}
+                </div>
+                {kids.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {kids.map((kid) => (
+                      <span key={kid.id} className={tagClass}>{kid.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Resolves the human-readable geography chain for a member. There's no
+ * "get district by id" style endpoint — only "list districts for a province" —
+ * so this walks the chain the member already has ids for and matches by id.
+ */
+function useGeographyNames(member: Member) {
+  const [names, setNames] = useState({ province: '—', district: '—', sector: '—', cellule: '—', village: '—' });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolve() {
+      const next = { province: '—', district: '—', sector: '—', cellule: '—', village: '—' };
+      try {
+        if (member.province_id) {
+          const provinces = await getProvinces();
+          next.province = provinces.find((p) => p.id === member.province_id)?.name ?? '—';
+        }
+        if (member.province_id && member.district_id) {
+          const districts = await getDistrictsForProvince(member.province_id);
+          next.district = districts.find((d) => d.id === member.district_id)?.name ?? '—';
+        }
+        if (member.district_id && member.sector_id) {
+          const sectors = await getSectorsForDistrict(member.district_id);
+          next.sector = sectors.find((s) => s.id === member.sector_id)?.name ?? '—';
+        }
+        if (member.sector_id && member.cellule_id) {
+          const cellules = await getCellulesForSector(member.sector_id);
+          next.cellule = cellules.find((c) => c.id === member.cellule_id)?.name ?? '—';
+        }
+        if (member.cellule_id && member.village_id) {
+          const villages = await getVillagesForCellule(member.cellule_id);
+          next.village = villages.find((v) => v.id === member.village_id)?.name ?? '—';
+        }
+      } catch {
+        // Leave whatever was resolved so far; geography display degrades to '—'.
+      }
+      if (!cancelled) setNames(next);
+    }
+
+    void resolve();
+    return () => { cancelled = true; };
+  }, [member.province_id, member.district_id, member.sector_id, member.cellule_id, member.village_id]);
+
+  return names;
+}
+
+export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
+  const geoNames = useGeographyNames(member);
 
   return (
-    <div className="space-y-5">
-      <button onClick={onBack} className="text-sm text-church-600 hover:underline">
+    <div>
+      <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ marginBottom: 20 }}>
         ← Back to Directory
       </button>
 
-      {/* Header card */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col sm:flex-row items-center sm:items-start gap-5">
-        <div className="w-20 h-20 rounded-full bg-church-100 flex items-center justify-center text-church-700 font-bold text-2xl flex-shrink-0">
-          {getInitials(member.firstName, member.lastName)}
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+          <div className="avatar" style={{ width: 64, height: 64, fontSize: 20 }}>
+            {getInitials(member.first_name, member.last_name)}
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 className="card-title" style={{ margin: 0 }}>{member.first_name} {member.last_name}</h2>
+            <div className="card-sub" style={{ marginTop: 4 }}>#{member.id} · {lookupName(SEX_OPTIONS, member.sex_id)} · {lookupName(MARITAL_STATUS_OPTIONS, member.marital_status_id)}</div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={onEdit}>Edit</button>
         </div>
-        <div className="flex-1 text-center sm:text-left">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {member.firstName} {member.lastName}
-          </h2>
-          <p className="text-gray-500 mt-0.5">{member.occupation || 'No occupation listed'}</p>
-          <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
-            <span className={`text-xs font-medium px-3 py-1 rounded-full border ${STATUS_COLORS[member.membershipStatus]}`}>
-              {member.membershipStatus}
-            </span>
-            <span className="text-xs font-medium px-3 py-1 rounded-full border bg-church-50 text-church-700 border-church-200">
-              {member.department}
-            </span>
-            {member.baptised && (
-              <span className="text-xs font-medium px-3 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
-                Baptised ✝
-              </span>
-            )}
+
+        <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '28px 32px' }}>
+          <div>
+            <div className="section-title"><h3>Personal</h3></div>
+            <DetailRow label="Father's Name" value={member.fathers_name ?? ''} />
+            <DetailRow label="Mother's Name" value={member.mothers_name ?? ''} />
+            <DetailRow label="Employed" value={member.employed === null ? '—' : member.employed ? 'Yes' : 'No'} />
+          </div>
+
+          <div>
+            <div className="section-title"><h3>Contact</h3></div>
+            <DetailRow label="Mobile" value={member.mobile_tel ?? ''} />
+            <DetailRow label="Email" value={member.email ?? ''} />
+            <DetailRow label="Fax" value={member.fax_number ?? ''} />
+          </div>
+
+          <div>
+            <div className="section-title"><h3>Geography</h3></div>
+            <DetailRow label="Province" value={geoNames.province} />
+            <DetailRow label="District" value={geoNames.district} />
+            <DetailRow label="Sector" value={geoNames.sector} />
+            <DetailRow label="Cellule" value={geoNames.cellule} />
+            <DetailRow label="Village" value={geoNames.village} />
+            <DetailRow label="Cell" value={lookupName(CELL_OPTIONS, member.cell_id)} />
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setIsEditing(true)}
-            className="px-4 py-2 bg-church-700 hover:bg-church-800 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="px-4 py-2 border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium rounded-lg transition-colors"
-          >
-            Delete
-          </button>
+
+        <div style={{ marginTop: 8 }}>
+          <div className="section-title" style={{ marginTop: 24 }}><h3>Church &amp; Work</h3></div>
+          <div className="detail-tag-list">
+            <PairedGroup
+              label="Departments & Responsibilities"
+              parents={member.departments}
+              childrenOf={(deptId) => member.church_responsibilities.filter((cr) => cr.department_id === deptId)}
+              tone="gold"
+            />
+            <TagGroup label="Talents" items={member.talents} tone="blue" />
+            <TagGroup label="Spiritual Gifts" items={member.spiritual_gifts} tone="blue" />
+            <TagGroup label="Occupations" items={member.occupations} />
+            <PairedGroup
+              label="Education & Faculties"
+              parents={member.educations}
+              childrenOf={(eduId) => member.faculties.filter((f) => f.education_id === eduId)}
+            />
+          </div>
         </div>
       </div>
-
-      {/* Details grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-xs font-semibold text-church-700 uppercase tracking-wide mb-3">Personal</h3>
-          <DetailRow label="Date of Birth" value={formatDate(member.dateOfBirth)} />
-          <DetailRow label="Gender" value={member.gender.replace('_', ' ')} />
-          <DetailRow label="Marital Status" value={member.maritalStatus} />
-          <DetailRow label="Occupation" value={member.occupation} />
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-xs font-semibold text-church-700 uppercase tracking-wide mb-3">Contact</h3>
-          <DetailRow label="Phone" value={member.phone} />
-          <DetailRow label="Email" value={member.email} />
-          <DetailRow label="Address" value={member.address} />
-          <DetailRow label="City" value={member.city} />
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-xs font-semibold text-church-700 uppercase tracking-wide mb-3">Church</h3>
-          <DetailRow label="Department" value={member.department} />
-          <DetailRow label="Status" value={member.membershipStatus} />
-          <DetailRow label="Baptised" value={member.baptised} />
-          <DetailRow label="Date Joined" value={formatDate(member.dateJoined)} />
-        </div>
-
-        {member.notes && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-xs font-semibold text-church-700 uppercase tracking-wide mb-3">Notes</h3>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{member.notes}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Delete confirmation */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Delete Member?</h3>
-            <p className="text-sm text-gray-500 mb-5">
-              This will permanently remove <strong>{member.firstName} {member.lastName}</strong> from the registry.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { onDelete(member.id); onBack(); }}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded-lg transition-colors"
-              >
-                Yes, Delete
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
