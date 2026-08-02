@@ -7,6 +7,7 @@ import type { User } from '../types/user';
 
 interface WelcomeProps {
   onEnter: () => void;
+  onRegisterNew: () => void;
   totalMembers: number;
   totalDepartments: number;
   isAuthenticated: boolean;
@@ -18,6 +19,7 @@ interface WelcomeProps {
 
 export function Welcome({
   onEnter,
+  onRegisterNew,
   totalMembers,
   totalDepartments,
   isAuthenticated,
@@ -102,9 +104,18 @@ export function Welcome({
             <button
               className="btn btn-primary"
               style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
+              onClick={onRegisterNew}
+            >
+              Register New Member
+              <Icon name="plus" size={14} />
+            </button>
+
+            <button
+              className="btn btn-outline"
+              style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
               onClick={onEnter}
             >
-              Enter Directory
+              View Directory
               <Icon name="arrow" size={14} />
             </button>
           </>

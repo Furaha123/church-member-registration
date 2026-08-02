@@ -47,6 +47,7 @@ export function App() {
           <AppHeader route="welcome" setRoute={() => {}} showTabs={false} />
           <Welcome
             onEnter={() => setRoute('directory')}
+            onRegisterNew={() => setRoute('register')}
             totalMembers={0}
             totalDepartments={0}
             isAuthenticated={false}
@@ -69,6 +70,7 @@ export function App() {
             <AppHeader route={route} setRoute={setRoute} showTabs={false} userName={user?.name} onLogout={handleLogout} />
             <Welcome
               onEnter={() => setRoute('directory')}
+              onRegisterNew={() => setRoute('register')}
               totalMembers={members.length}
               totalDepartments={totalDepartments}
               isAuthenticated={true}
