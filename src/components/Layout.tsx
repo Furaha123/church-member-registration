@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type Route = 'welcome' | 'register' | 'directory';
+export type Route = 'welcome' | 'register' | 'directory' | 'profile' | 'edit';
 
 export function Logo({ size = 52 }: { size?: number }) {
   return (
@@ -9,7 +9,7 @@ export function Logo({ size = 52 }: { size?: number }) {
       alt="Eglise Vivante"
       width={size}
       height={size}
-      style={{ objectFit: 'contain', mixBlendMode: 'screen' }}
+      style={{ objectFit: 'contain' }}
     />
   );
 }
@@ -24,6 +24,9 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   check: <path d="M5 13l4 4L19 7" />,
   upload: <><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 20h14" /></>,
   download: <><path d="M12 4v12M7 11l5 5 5-5" /><path d="M5 20h14" /></>,
+  trash: <><path d="M4 7h16" /><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" /><path d="M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></>,
+  eye: <><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" /></>,
+  edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z" /></>,
 };
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -52,12 +55,12 @@ export function Clock() {
 }
 
 interface AppHeaderProps {
-  route: Route;
   setRoute: (r: Route) => void;
-  showTabs?: boolean;
+  userName?: string;
+  onLogout?: () => void;
 }
 
-export function AppHeader({ route, setRoute, showTabs = true }: AppHeaderProps) {
+export function AppHeader({ setRoute, userName, onLogout }: AppHeaderProps) {
   return (
     <header className="app-header">
       <div className="app-header-inner">
@@ -73,17 +76,14 @@ export function AppHeader({ route, setRoute, showTabs = true }: AppHeaderProps) 
           <span className="ornament">✦</span>
           Database of Church Members
           <span className="ornament">✦</span>
-          {showTabs && (
-            <nav className="nav-tabs">
-              <button className={'nav-tab' + (route === 'register' ? ' active' : '')} onClick={() => setRoute('register')}>
-                Register
-              </button>
-              <button className={'nav-tab' + (route === 'directory' ? ' active' : '')} onClick={() => setRoute('directory')}>
-                Directory
-              </button>
-            </nav>
-          )}
         </div>
+
+        {onLogout && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifySelf: 'end' }}>
+            {userName && <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>{userName}</span>}
+            <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sign out</button>
+          </div>
+        )}
 
       </div>
     </header>

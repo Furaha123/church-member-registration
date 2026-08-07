@@ -1,56 +1,137 @@
 import { useState } from 'react';
-import type { MemberFormData } from '../types/member';
+import type { Member, MemberPayload, EducationEntry, DepartmentEntry } from '../types/member';
 import { Icon } from './Layout';
-import {
-  SEX_OPTIONS, MARITAL_OPTIONS, EDUCATION_OPTIONS,
-  MINISTRY_OPTIONS, TALENT_OPTIONS, RESPONSIBILITY_OPTIONS,
-  OCCUPATION_OPTIONS, GEOGRAPHY,
-} from '../data/constants';
+import { useLookups } from '../hooks/useLookups';
+import { useGeographyCascade } from '../hooks/useGeographyCascade';
+import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
+import { MultiSelectChecklist } from './form/MultiSelectChecklist';
+import { EducationEntries } from './form/EducationEntries';
+import { DepartmentEntries } from './form/DepartmentEntries';
+import { FamilyMemberEntries, type FamilyMemberEntry } from './form/FamilyMemberEntries';
+import { ApiError } from '../api/client';
 
 interface MemberFormProps {
-  onSubmit: (data: MemberFormData) => void;
+  member?: Member;
+  onSubmit: (data: MemberPayload) => Promise<Member>;
+  onSuccess: (member: Member) => void;
   onCancel: () => void;
 }
 
 interface FormState {
-  firstName: string; lastName: string; sex: string; marital: string; dob: string;
-  fatherName: string; motherName: string;
-  salvation: string; baptism: string; memberSince: string;
-  education: string; ministry: string; talent: string;
-  mobile: string; email: string; fax: string;
-  district: string; sector: string; zone: string; cell: string;
-  responsibility: string;
-  occupation: string; employed: string;
-  notes: string;
+  first_name: string;
+  last_name: string;
+  sex_id: number | '';
+  marital_status_id: number | '';
+  fathers_name: string;
+  mothers_name: string;
+  talent: number[];
+  spiritual_gift: number[];
+  occupation: number[];
+  education: EducationEntry[];
+  employed: '' | 'yes' | 'no';
+  mobile_tel: string;
+  email: string;
+  province_id: number | '';
+  district_id: number | '';
+  sector_id: number | '';
+  cellule_id: number | '';
+  village_id: number | '';
+  cell_id: number | '';
+  department: DepartmentEntry[];
+  // Placeholder only — see FamilyMemberEntries.tsx. Never sent to the API.
+  family_members: FamilyMemberEntry[];
+  // Placeholders too: free-text fallbacks for when the lookup lists don't have
+  // what the user needs. talent/occupation/spiritual_gift only accept ids that
+  // already exist in their lookup tables (`exists:talent,id` etc.), so there's
+  // no backend field to send a custom value to yet. Kept local-only for now.
+  talentOther: string;
+  spiritualGiftOther: string;
+  occupationOther: string;
 }
+
+// Backend only enforces `string` + `max:20` on mobile_tel (Store/UpdateMemberRequest) —
+// no format rule — so this is a frontend-only guard against typing plain text
+// (e.g. lorem-ipsum placeholder data) into a phone number field.
+const PHONE_PATTERN = /^[0-9+\-\s()]+$/;
 
 const STEPS = [
   { id: 1, label: 'Personal' },
   { id: 2, label: 'Spiritual' },
   { id: 3, label: 'Contact' },
-  { id: 4, label: 'Vocation' },
+  { id: 4, label: 'Review' },
 ];
 
-function genId(): string {
-  return 'EV-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 9000) + 1000);
+function initialFormState(member?: Member): FormState {
+  return {
+    first_name: member?.first_name ?? '',
+    last_name: member?.last_name ?? '',
+    sex_id: member?.sex_id ?? '',
+    marital_status_id: member?.marital_status_id ?? '',
+    fathers_name: member?.fathers_name ?? '',
+    mothers_name: member?.mothers_name ?? '',
+    // These three are plain many-to-many with no pivot data, so they round-trip
+    // cleanly from a loaded member.
+    talent: member?.talents.map((t) => t.id) ?? [],
+    spiritual_gift: member?.spiritual_gifts.map((g) => g.id) ?? [],
+    occupation: member?.occupations.map((o) => o.id) ?? [],
+    // Reconstructed by grouping each member's flat faculties/church_responsibilities
+    // list back onto their paired education/department, using the education_id /
+    // department_id that FacultyResource and ChurchResponsibilityResource now
+    // expose from the pivot (see MemberFaculty / MemberChurchResponsibility).
+    education: member?.educations.map((edu) => ({
+      education_id: edu.id,
+      faculty: member.faculties.filter((f) => f.education_id === edu.id).map((f) => f.id),
+    })) ?? [],
+    department: member?.departments.map((dept) => ({
+      department_id: dept.id,
+      church_responsibility: member.church_responsibilities
+        .filter((cr) => cr.department_id === dept.id)
+        .map((cr) => cr.id),
+    })) ?? [],
+    employed: member?.employed === true ? 'yes' : member?.employed === false ? 'no' : '',
+    mobile_tel: member?.mobile_tel ?? '',
+    email: member?.email ?? '',
+    province_id: member?.province_id ?? '',
+    district_id: member?.district_id ?? '',
+    sector_id: member?.sector_id ?? '',
+    cellule_id: member?.cellule_id ?? '',
+    village_id: member?.village_id ?? '',
+    cell_id: member?.cell_id ?? '',
+    // Always starts empty: the backend has nowhere to persist this yet, so
+    // there's nothing to load back in even when editing an existing member.
+    family_members: [],
+    talentOther: '',
+    spiritualGiftOther: '',
+    occupationOther: '',
+  };
 }
 
-function Stepper({ current, setStep }: { current: number; setStep: (n: number) => void }) {
-  return (
-    <div className="stepper">
-      {STEPS.map(s => {
-        const cls = s.id === current ? 'active' : s.id < current ? 'done' : '';
-        return (
-          <div key={s.id} className={'step ' + cls} onClick={() => setStep(s.id)}>
-            <div className="step-dot">
-              {s.id < current ? <Icon name="check" size={18} /> : String(s.id).padStart(2, '0')}
-            </div>
-            <div className="step-label">{s.label}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
+function toPayload(form: FormState): MemberPayload {
+  const payload: MemberPayload = {
+    first_name: form.first_name.trim(),
+    last_name: form.last_name.trim(),
+    sex_id: Number(form.sex_id),
+    marital_status_id: Number(form.marital_status_id),
+    talent: form.talent,
+    spiritual_gift: form.spiritual_gift,
+  };
+
+  if (form.fathers_name.trim()) payload.fathers_name = form.fathers_name.trim();
+  if (form.mothers_name.trim()) payload.mothers_name = form.mothers_name.trim();
+  if (form.employed) payload.employed = form.employed === 'yes';
+  if (form.occupation.length > 0) payload.occupation = form.occupation;
+  if (form.education.length > 0) payload.education = form.education;
+  if (form.department.length > 0) payload.department = form.department;
+  if (form.mobile_tel.trim()) payload.mobile_tel = form.mobile_tel.trim();
+  if (form.email.trim()) payload.email = form.email.trim();
+  if (form.province_id) payload.province_id = Number(form.province_id);
+  if (form.district_id) payload.district_id = Number(form.district_id);
+  if (form.sector_id) payload.sector_id = Number(form.sector_id);
+  if (form.cellule_id) payload.cellule_id = Number(form.cellule_id);
+  if (form.village_id) payload.village_id = Number(form.village_id);
+  if (form.cell_id) payload.cell_id = Number(form.cell_id);
+
+  return payload;
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -78,304 +159,418 @@ function Field({ label, required, hint, span = 6, children }: {
   );
 }
 
-function Inp({ value, onChange, type = 'text', placeholder, readOnly }: {
-  value: string; onChange?: (v: string) => void; type?: string; placeholder?: string; readOnly?: boolean;
+function Inp({ value, onChange, type = 'text', placeholder }: {
+  value: string; onChange: (v: string) => void; type?: string; placeholder?: string;
 }) {
   return (
     <input
-      className={'input' + (readOnly ? ' readonly' : '')}
+      className="input"
       type={type}
       value={value}
-      onChange={e => onChange?.(e.target.value)}
+      onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      readOnly={readOnly}
     />
   );
 }
 
-function Sel({ value, onChange, options, placeholder = 'Select…' }: {
-  value: string; onChange: (v: string) => void; options: string[]; placeholder?: string;
-}) {
+function Stepper({ current, setStep }: { current: number; setStep: (n: number) => void }) {
   return (
-    <select className="select" value={value} onChange={e => onChange(e.target.value)}>
-      <option value="" disabled>{placeholder}</option>
-      {options.map(o => <option key={o} value={o}>{o}</option>)}
-    </select>
-  );
-}
-
-function Step1({ form, update }: { form: FormState; update: (k: keyof FormState, v: string) => void }) {
-  return (
-    <>
-      <SectionTitle>Personal Information</SectionTitle>
-      <div className="form-grid">
-        <div className="field field-col-4">
-          <label className="label">Member Photograph</label>
-          <div className="photo-upload">
-            <div className="photo-frame">
-              <div className="placeholder">Drop<br />Photo<br />Here</div>
+    <div className="stepper">
+      {STEPS.map((s) => {
+        const cls = s.id === current ? 'active' : s.id < current ? 'done' : '';
+        return (
+          <div key={s.id} className={'step ' + cls} onClick={() => setStep(s.id)}>
+            <div className="step-dot">
+              {s.id < current ? <Icon name="check" size={18} /> : String(s.id).padStart(2, '0')}
             </div>
-            <div className="photo-actions">
-              <button className="btn btn-outline btn-sm"><Icon name="upload" size={12} /> Upload</button>
-              <div className="hint">JPG or PNG · square crop preferred · max 4 MB</div>
-            </div>
+            <div className="step-label">{s.label}</div>
           </div>
-        </div>
-
-        <div className="field field-col-8" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 24px' }}>
-          <div className="field" style={{ gridColumn: 'span 2' }}>
-            <label className="label">Member ID <span className="hint">auto</span></label>
-            <Inp value={form.firstName ? genId() : '—'} readOnly />
-          </div>
-          <div className="field">
-            <label className="label">First Name <span className="req">*</span></label>
-            <Inp value={form.firstName} onChange={v => update('firstName', v)} />
-          </div>
-          <div className="field">
-            <label className="label">Last Name <span className="req">*</span></label>
-            <Inp value={form.lastName} onChange={v => update('lastName', v)} />
-          </div>
-        </div>
-
-        <Field label="Sex" required span={4}>
-          <Sel value={form.sex} onChange={v => update('sex', v)} options={SEX_OPTIONS} />
-        </Field>
-        <Field label="Marital Status" required span={4}>
-          <Sel value={form.marital} onChange={v => update('marital', v)} options={MARITAL_OPTIONS} />
-        </Field>
-        <Field label="Date of Birth" required span={4}>
-          <Inp type="date" value={form.dob} onChange={v => update('dob', v)} />
-        </Field>
-        <Field label="Father's Name" span={6}>
-          <Inp value={form.fatherName} onChange={v => update('fatherName', v)} />
-        </Field>
-        <Field label="Mother's Name" span={6}>
-          <Inp value={form.motherName} onChange={v => update('motherName', v)} />
-        </Field>
-      </div>
-    </>
+        );
+      })}
+    </div>
   );
 }
 
-function Step2({ form, update }: { form: FormState; update: (k: keyof FormState, v: string) => void }) {
-  return (
-    <>
-      <SectionTitle>Spiritual Walk</SectionTitle>
-      <div className="form-grid">
-        <Field label="Date of Salvation" required span={4}>
-          <Inp type="date" value={form.salvation} onChange={v => update('salvation', v)} />
-        </Field>
-        <Field label="Date of Baptism" span={4}>
-          <Inp type="date" value={form.baptism} onChange={v => update('baptism', v)} />
-        </Field>
-        <Field label="Member Since" required span={4}>
-          <Inp type="date" value={form.memberSince} onChange={v => update('memberSince', v)} />
-        </Field>
-        <Field label="Education" span={6}>
-          <Sel value={form.education} onChange={v => update('education', v)} options={EDUCATION_OPTIONS} />
-        </Field>
-        <Field label="Ministry" span={6}>
-          <Sel value={form.ministry} onChange={v => update('ministry', v)} options={MINISTRY_OPTIONS} />
-        </Field>
-        <Field label="Talent / Gift" hint="primary calling" span={12}>
-          <Sel value={form.talent} onChange={v => update('talent', v)} options={TALENT_OPTIONS} />
-        </Field>
-      </div>
-    </>
-  );
-}
-
-function Step3({ form, update }: { form: FormState; update: (k: keyof FormState, v: string) => void }) {
-  const districts = Object.keys(GEOGRAPHY);
-  const sectors = form.district ? Object.keys(GEOGRAPHY[form.district] ?? {}) : [];
-  const zones = form.district && form.sector ? Object.keys(GEOGRAPHY[form.district]?.[form.sector] ?? {}) : [];
-  const cells = form.district && form.sector && form.zone ? (GEOGRAPHY[form.district]?.[form.sector]?.[form.zone] ?? []) : [];
-
-  return (
-    <>
-      <SectionTitle>Contact &amp; Location</SectionTitle>
-      <div className="form-grid">
-        <Field label="Mobile Telephone" required span={4}>
-          <div className="input-with-icon">
-            <span className="ico"><Icon name="phone" size={14} /></span>
-            <Inp value={form.mobile} onChange={v => update('mobile', v)} placeholder="+250 …" />
-          </div>
-        </Field>
-        <Field label="E-mail Address" span={5}>
-          <div className="input-with-icon">
-            <span className="ico"><Icon name="mail" size={14} /></span>
-            <Inp type="email" value={form.email} onChange={v => update('email', v)} />
-          </div>
-        </Field>
-        <Field label="Fax Number" span={3}>
-          <Inp value={form.fax} onChange={v => update('fax', v)} placeholder="optional" />
-        </Field>
-
-        <div className="field field-col-12"><SectionTitle>Residential Geography</SectionTitle></div>
-
-        <Field label="District" required span={3}>
-          <Sel value={form.district} onChange={v => { update('district', v); update('sector', ''); update('zone', ''); update('cell', ''); }} options={districts} />
-        </Field>
-        <Field label="Sector" span={3}>
-          <Sel value={form.sector} onChange={v => { update('sector', v); update('zone', ''); update('cell', ''); }}
-            options={sectors} placeholder={form.district ? 'Select sector' : 'Select district first'} />
-        </Field>
-        <Field label="Zone" span={3}>
-          <Sel value={form.zone} onChange={v => { update('zone', v); update('cell', ''); }}
-            options={zones} placeholder={form.sector ? 'Select zone' : '—'} />
-        </Field>
-        <Field label="Cell" span={3}>
-          <Sel value={form.cell} onChange={v => update('cell', v)}
-            options={cells} placeholder={form.zone ? 'Select cell' : '—'} />
-        </Field>
-
-        <Field label="Church Responsibility" span={12}>
-          <Sel value={form.responsibility} onChange={v => update('responsibility', v)} options={RESPONSIBILITY_OPTIONS} />
-        </Field>
-      </div>
-    </>
-  );
-}
-
-function Step4({ form, update, memberId }: { form: FormState; update: (k: keyof FormState, v: string) => void; memberId: string }) {
-  return (
-    <>
-      <SectionTitle>Vocation &amp; Service</SectionTitle>
-      <div className="form-grid">
-        <Field label="Occupation" required span={6}>
-          <Sel value={form.occupation} onChange={v => update('occupation', v)} options={OCCUPATION_OPTIONS} />
-        </Field>
-        <Field label="Currently Employed" required span={6}>
-          <Sel value={form.employed} onChange={v => update('employed', v)} options={['Yes', 'No']} />
-        </Field>
-
-        <div className="field field-col-12" style={{ marginTop: 12 }}>
-          <SectionTitle>Review &amp; Confirm</SectionTitle>
-        </div>
-        <div className="field field-col-12">
-          <div style={{ background: 'rgba(212,160,23,0.04)', border: '1px solid var(--line)', borderRadius: 6, padding: '24px 28px', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '18px 32px' }}>
-            {[
-              ['Member ID', memberId],
-              ['Full Name', `${form.firstName || '—'} ${form.lastName || ''}`],
-              ['Date of Birth', form.dob || '—'],
-              ['Member Since', form.memberSince || '—'],
-              ['Ministry', form.ministry || '—'],
-              ['Responsibility', form.responsibility || '—'],
-              ['Mobile', form.mobile || '—'],
-              ['Cell', `${form.cell || '—'}, ${form.sector || ''}`],
-              ['Occupation', form.occupation || '—'],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontFamily: 'Cinzel,serif', fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--cream-faint)' }}>{k}</div>
-                <div style={{ marginTop: 6, fontSize: 14, color: 'var(--cream)' }}>{v}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="field field-col-12">
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, color: 'var(--cream-dim)', fontSize: 13, lineHeight: 1.7, padding: '14px 0', cursor: 'pointer' }}>
-            <input type="checkbox" defaultChecked style={{ accentColor: 'var(--gold-500)', marginTop: 4 }} />
-            <span>I confirm that the information provided is true to the best of my knowledge, and I consent to its keeping in the church members' database for the purposes of pastoral care, communication, and ministry organisation.</span>
-          </label>
-        </div>
-      </div>
-    </>
-  );
-}
-
-export function MemberForm({ onSubmit, onCancel }: MemberFormProps) {
+export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberFormProps) {
+  const lookups = useLookups();
   const [step, setStep] = useState(1);
-  const [submitted, setSubmitted] = useState(false);
-  const [memberId] = useState(genId);
-  const [form, setForm] = useState<FormState>({
-    firstName: '', lastName: '', sex: '', marital: '', dob: '',
-    fatherName: '', motherName: '',
-    salvation: '', baptism: '', memberSince: '',
-    education: '', ministry: '', talent: '',
-    mobile: '', email: '', fax: '',
-    district: '', sector: '', zone: '', cell: '',
-    responsibility: '',
-    occupation: '', employed: '',
-    notes: '',
-  });
+  const [form, setForm] = useState<FormState>(() => initialFormState(member));
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
-  const update = (k: keyof FormState, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const geo = useGeographyCascade(form.province_id, form.district_id, form.sector_id, form.cellule_id);
 
-  const handleSubmit = () => {
-    const data: MemberFormData = {
-      firstName: form.firstName,
-      lastName: form.lastName,
-      email: form.email,
-      phone: form.mobile,
-      dateOfBirth: form.dob,
-      gender: form.sex === 'Male' ? 'male' : 'female',
-      maritalStatus: (form.marital.toLowerCase() as MemberFormData['maritalStatus']),
-      address: form.cell,
-      city: form.sector,
-      occupation: form.occupation,
-      department: form.ministry,
-      membershipStatus: 'active',
-      baptised: !!form.baptism,
-      notes: form.notes,
-    };
-    onSubmit(data);
-    setSubmitted(true);
-  };
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
 
-  if (submitted) {
-    return (
-      <div className="card" style={{ textAlign: 'center', padding: '60px 40px' }}>
-        <div style={{ width: 80, height: 80, margin: '0 auto 24px', borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'linear-gradient(180deg,var(--gold-400),var(--gold-500))', color: 'var(--navy-900)', boxShadow: '0 0 0 6px rgba(212,160,23,0.15)' }}>
-          <Icon name="check" size={40} />
-        </div>
-        <div className="eyebrow" style={{ marginBottom: 12 }}>Welcome to the Family</div>
-        <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 32, margin: '0 0 16px', color: 'var(--cream)', fontWeight: 500 }}>
-          {form.firstName} {form.lastName} has been enrolled.
-        </h2>
-        <p style={{ maxWidth: '54ch', margin: '0 auto 28px', color: 'var(--cream-dim)', lineHeight: 1.7 }}>
-          Member <strong style={{ color: 'var(--gold-300)', fontFamily: 'Cinzel,serif' }}>{memberId}</strong> has been added to the church register.
-        </p>
-        <div style={{ display: 'flex', gap: 14, justifyContent: 'center' }}>
-          <button className="btn btn-outline" onClick={onCancel}>Register Another</button>
-          <button className="btn btn-primary" onClick={onCancel}>
-            View Directory <Icon name="arrow" size={14} />
-          </button>
-        </div>
-      </div>
-    );
+  const isEditing = Boolean(member);
+  const isMarried = MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name === 'MARRIED';
+  const mobileValid = form.mobile_tel.trim() === '' || PHONE_PATTERN.test(form.mobile_tel.trim());
+  const canSubmit =
+    form.first_name.trim().length > 0 &&
+    form.last_name.trim().length > 0 &&
+    form.sex_id !== '' &&
+    form.marital_status_id !== '' &&
+    form.talent.length > 0 &&
+    form.spiritual_gift.length > 0 &&
+    mobileValid;
+
+  async function handleSubmit() {
+    if (!canSubmit || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    setFieldErrors({});
+    try {
+      const saved = await onSubmit(toPayload(form));
+      onSuccess(saved);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setSubmitError(err.message);
+        setFieldErrors(err.errors ?? {});
+      } else {
+        setSubmitError(err instanceof Error ? err.message : 'Something went wrong while saving.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
     <div className="card">
       <div className="card-header">
         <div>
-          <div className="eyebrow">Step {step} of 4 · New Member</div>
-          <h2 className="card-title">Register a Brother or Sister</h2>
+          <div className="eyebrow">Step {step} of {STEPS.length} · {isEditing ? 'Edit Member' : 'New Member'}</div>
+          <h2 className="card-title">{isEditing ? 'Update Member' : 'Register a New Member'}</h2>
           <div className="card-sub">
-            All fields marked <span style={{ color: 'var(--gold-400)' }}>*</span> are required for the church register.
+            Fields marked <span style={{ color: 'var(--gold-400)' }}>*</span> are required.
           </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>Today's Entry</div>
-          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 18, color: 'var(--gold-300)', letterSpacing: '0.12em' }}>{memberId}</div>
         </div>
       </div>
 
       <Stepper current={step} setStep={setStep} />
 
-      {step === 1 && <Step1 form={form} update={update} />}
-      {step === 2 && <Step2 form={form} update={update} />}
-      {step === 3 && <Step3 form={form} update={update} />}
-      {step === 4 && <Step4 form={form} update={update} memberId={memberId} />}
+      {lookups.error && (
+        <div className="state-banner error">Couldn't load form options: {lookups.error}</div>
+      )}
+
+      {step === 1 && (
+        <>
+          <SectionTitle>Personal Information</SectionTitle>
+          <div className="form-grid">
+            <Field label="First Name" required span={6}>
+              <Inp value={form.first_name} onChange={(v) => set('first_name', v)} />
+            </Field>
+            <Field label="Last Name" required span={6}>
+              <Inp value={form.last_name} onChange={(v) => set('last_name', v)} />
+            </Field>
+            <Field label="Gender" required span={4}>
+              <select
+                className="select"
+                value={form.sex_id}
+                onChange={(e) => set('sex_id', e.target.value === '' ? '' : Number(e.target.value))}
+              >
+                <option value="" disabled>Select…</option>
+                {SEX_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Marital Status" required span={4}>
+              <select
+                className="select"
+                value={form.marital_status_id}
+                onChange={(e) => set('marital_status_id', e.target.value === '' ? '' : Number(e.target.value))}
+              >
+                <option value="" disabled>Select…</option>
+                {MARITAL_STATUS_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Currently Employed" span={4}>
+              <select
+                className="select"
+                value={form.employed}
+                onChange={(e) => set('employed', e.target.value as FormState['employed'])}
+              >
+                <option value="">—</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </Field>
+            <Field label="Father's Name" span={6}>
+              <Inp value={form.fathers_name} onChange={(v) => set('fathers_name', v)} />
+            </Field>
+            <Field label="Mother's Name" span={6}>
+              <Inp value={form.mothers_name} onChange={(v) => set('mothers_name', v)} />
+            </Field>
+
+            {isMarried && (
+              <div className="field field-col-12" style={{ marginTop: 8 }}>
+                <SectionTitle>Family Members</SectionTitle>
+                <div className="state-banner info">
+                  Placeholder only — the backend has no way to store spouse or children records yet, so this
+                  section won't be saved when you submit. It's here so the design is ready once that support
+                  is added.
+                </div>
+                <FamilyMemberEntries
+                  entries={form.family_members}
+                  onChange={(entries) => set('family_members', entries)}
+                />
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          <SectionTitle>Gifts, Work &amp; Education</SectionTitle>
+          <div className="form-grid">
+            <MultiSelectChecklist
+              label="Talents"
+              required
+              searchable
+              loading={lookups.loading}
+              options={lookups.talents}
+              selected={form.talent}
+              onChange={(ids) => set('talent', ids)}
+              placeholder={`Search ${lookups.talents.length} talents…`}
+              emptyText="No talents defined yet."
+            />
+            <div className="field field-col-12">
+              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
+              <Inp value={form.talentOther} onChange={(v) => set('talentOther', v)} placeholder="Type a talent that isn't listed above" />
+            </div>
+
+            <MultiSelectChecklist
+              label="Spiritual Gifts"
+              required
+              searchable
+              loading={lookups.loading}
+              options={lookups.spiritualGifts}
+              selected={form.spiritual_gift}
+              onChange={(ids) => set('spiritual_gift', ids)}
+              placeholder={`Search ${lookups.spiritualGifts.length} spiritual gifts…`}
+              emptyText="No spiritual gifts defined yet."
+            />
+            <div className="field field-col-12">
+              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
+              <Inp value={form.spiritualGiftOther} onChange={(v) => set('spiritualGiftOther', v)} placeholder="Type a spiritual gift that isn't listed above" />
+            </div>
+
+            <MultiSelectChecklist
+              label="Occupations"
+              searchable
+              loading={lookups.loading}
+              options={lookups.occupations}
+              selected={form.occupation}
+              onChange={(ids) => set('occupation', ids)}
+              placeholder={`Search ${lookups.occupations.length} occupations…`}
+              emptyText="No occupations defined yet."
+            />
+            <div className="field field-col-12">
+              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
+              <Inp value={form.occupationOther} onChange={(v) => set('occupationOther', v)} placeholder="Type an occupation that isn't listed above" />
+            </div>
+            <div className="field field-col-12" style={{ marginTop: 8 }}>
+              <SectionTitle>Education</SectionTitle>
+              <EducationEntries
+                educations={lookups.educations}
+                entries={form.education}
+                onChange={(entries) => set('education', entries)}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {step === 3 && (
+        <>
+          <SectionTitle>Contact &amp; Location</SectionTitle>
+          <div className="form-grid">
+            <Field label="Mobile Telephone" span={5}>
+              <div className="input-with-icon">
+                <span className="ico"><Icon name="phone" size={14} /></span>
+                <Inp value={form.mobile_tel} onChange={(v) => set('mobile_tel', v)} placeholder="+250 …" />
+              </div>
+              {!mobileValid && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
+                  Numbers only — digits, spaces, and +, -, ( ) are allowed, no letters.
+                </div>
+              )}
+            </Field>
+            <Field label="E-mail Address" span={7}>
+              <div className="input-with-icon">
+                <span className="ico"><Icon name="mail" size={14} /></span>
+                <Inp type="email" value={form.email} onChange={(v) => set('email', v)} />
+              </div>
+            </Field>
+
+            <div className="field field-col-12"><SectionTitle>Address</SectionTitle></div>
+
+            <Field label="Province" span={4}>
+              <select
+                className="select"
+                value={form.province_id}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? '' : Number(e.target.value);
+                  setForm((f) => ({ ...f, province_id: v, district_id: '', sector_id: '', cellule_id: '', village_id: '' }));
+                }}
+              >
+                <option value="">Select province…</option>
+                {lookups.provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="District" span={4}>
+              <select
+                className="select"
+                value={form.district_id}
+                disabled={!form.province_id}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? '' : Number(e.target.value);
+                  setForm((f) => ({ ...f, district_id: v, sector_id: '', cellule_id: '', village_id: '' }));
+                }}
+              >
+                <option value="">{form.province_id ? 'Select district…' : 'Select province first'}</option>
+                {geo.districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Sector" span={4}>
+              <select
+                className="select"
+                value={form.sector_id}
+                disabled={!form.district_id}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? '' : Number(e.target.value);
+                  setForm((f) => ({ ...f, sector_id: v, cellule_id: '', village_id: '' }));
+                }}
+              >
+                <option value="">{form.district_id ? 'Select sector…' : '—'}</option>
+                {geo.sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Cellule" span={4}>
+              <select
+                className="select"
+                value={form.cellule_id}
+                disabled={!form.sector_id}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? '' : Number(e.target.value);
+                  setForm((f) => ({ ...f, cellule_id: v, village_id: '' }));
+                }}
+              >
+                <option value="">{form.sector_id ? 'Select cellule…' : '—'}</option>
+                {geo.cellules.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Village" span={4}>
+              <select
+                className="select"
+                value={form.village_id}
+                disabled={!form.cellule_id}
+                onChange={(e) => set('village_id', e.target.value === '' ? '' : Number(e.target.value))}
+              >
+                <option value="">{form.cellule_id ? 'Select village…' : '—'}</option>
+                {geo.villages.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Church Cell" hint="a small home group, not the Cellule above" span={4}>
+              <select
+                className="select"
+                value={form.cell_id}
+                onChange={(e) => set('cell_id', e.target.value === '' ? '' : Number(e.target.value))}
+              >
+                <option value="">Select cell…</option>
+                {CELL_OPTIONS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+
+            <div className="field field-col-12" style={{ marginTop: 8 }}>
+              <SectionTitle>Church Departments</SectionTitle>
+              <DepartmentEntries
+                departments={lookups.departments}
+                entries={form.department}
+                onChange={(entries) => set('department', entries)}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {step === 4 && (
+        <>
+          <SectionTitle>Review &amp; Confirm</SectionTitle>
+          <div className="form-grid">
+            <div className="field field-col-12">
+              <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 8, padding: '22px 26px', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px 28px' }}>
+                {[
+                  ['Full Name', `${form.first_name || '—'} ${form.last_name || ''}`],
+                  ['Gender', SEX_OPTIONS.find((o) => o.id === form.sex_id)?.name ?? '—'],
+                  ['Marital Status', MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name ?? '—'],
+                  ['Mobile', form.mobile_tel || '—'],
+                  ['Talents', String(form.talent.length)],
+                  ['Spiritual Gifts', String(form.spiritual_gift.length)],
+                  ['Occupations', String(form.occupation.length)],
+                  ['Education', String(form.education.length)],
+                  ['Departments', String(form.department.length)],
+                  ...(isMarried ? [['Family Members (not saved)', String(form.family_members.length)]] : []),
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--cream-faint)' }}>{k}</div>
+                    <div style={{ marginTop: 6, fontSize: 14, color: 'var(--cream)' }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {!canSubmit && (
+              <div className="field field-col-12">
+                <div className="state-banner info">
+                  First name, last name, sex, marital status, at least one talent, and at least one spiritual gift
+                  are required before this can be submitted.
+                  {!mobileValid && ' The mobile number also has letters in it — numbers only.'}
+                </div>
+              </div>
+            )}
+
+            {submitError && (
+              <div className="field field-col-12">
+                <div className="state-banner error">
+                  {submitError}
+                  {Object.keys(fieldErrors).length > 0 && (
+                    <ul style={{ marginTop: 8, paddingLeft: 18 }}>
+                      {Object.entries(fieldErrors).map(([field, messages]) => (
+                        <li key={field}>{messages.join(' ')}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="field field-col-12">
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, color: 'var(--cream-dim)', fontSize: 13, lineHeight: 1.7, padding: '14px 0', cursor: 'pointer' }}>
+                <input type="checkbox" defaultChecked style={{ accentColor: 'var(--gold-500)', marginTop: 4 }} />
+                <span>I confirm this information is correct and agree to it being stored in the church member database.</span>
+              </label>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="form-nav">
-        <button className="btn btn-outline" onClick={step === 1 ? onCancel : () => setStep(step - 1)}>
+        <button className="btn btn-outline" onClick={step === 1 ? onCancel : () => setStep(step - 1)} disabled={submitting}>
           {step === 1 ? 'Cancel' : '← Previous'}
         </button>
-        <div className="meta">{form.firstName} {form.lastName} · {memberId}</div>
-        <button className="btn btn-primary" onClick={step === 4 ? handleSubmit : () => setStep(step + 1)}>
-          {step === 4 ? <>Submit Registration <Icon name="check" size={14} /></> : <>Next Step <Icon name="arrow" size={14} /></>}
-        </button>
+        <div className="meta">{form.first_name} {form.last_name}</div>
+        {step === STEPS.length ? (
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={!canSubmit || submitting}>
+            {submitting ? 'Saving…' : <>{isEditing ? 'Save Changes' : 'Submit Registration'} <Icon name="check" size={14} /></>}
+          </button>
+        ) : (
+          <button className="btn btn-primary" onClick={() => setStep(step + 1)}>
+            Next Step <Icon name="arrow" size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
