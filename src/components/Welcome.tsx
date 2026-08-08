@@ -8,6 +8,8 @@ import type { User } from '../types/user';
 interface WelcomeProps {
   onEnter: () => void;
   onRegisterNew: () => void;
+  onViewFamilies: () => void;
+  onManageUsers: () => void;
   totalMembers: number;
   totalDepartments: number;
   isAuthenticated: boolean;
@@ -20,6 +22,8 @@ interface WelcomeProps {
 export function Welcome({
   onEnter,
   onRegisterNew,
+  onViewFamilies,
+  onManageUsers,
   totalMembers,
   totalDepartments,
   isAuthenticated,
@@ -118,6 +122,26 @@ export function Welcome({
               View All Members
               <Icon name="arrow" size={14} />
             </button>
+
+            <button
+              className="btn btn-outline"
+              style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
+              onClick={onViewFamilies}
+            >
+              Manage Families
+              <Icon name="arrow" size={14} />
+            </button>
+
+            {user.role === 'admin' && (
+              <button
+                className="btn btn-outline"
+                style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
+                onClick={onManageUsers}
+              >
+                User Management
+                <Icon name="lock" size={14} />
+              </button>
+            )}
           </>
         ) : (
           <>

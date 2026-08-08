@@ -108,3 +108,11 @@ export const apiPost = <T>(path: string, body: unknown): Promise<T> =>
 
 export const apiPut = <T>(path: string, body: unknown): Promise<T> =>
   request<T>(path, { method: 'PUT', body: JSON.stringify(body) });
+
+export const apiPatch = <T>(path: string, body: unknown): Promise<T> =>
+  request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+
+// DELETE routes in routes/api.php return 204 No Content, which request() maps to
+// undefined — so callers typically use apiDelete<void>.
+export const apiDelete = <T>(path: string): Promise<T> =>
+  request<T>(path, { method: 'DELETE' });

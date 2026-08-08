@@ -22,6 +22,11 @@ interface FormState {
   last_name: string;
   sex_id: number | '';
   marital_status_id: number | '';
+  date_birthday: string;
+  national_id: string;
+  date_salvation: string;
+  date_baptism: string;
+  member_since: string;
   fathers_name: string;
   mothers_name: string;
   talent: number[];
@@ -67,6 +72,11 @@ function initialFormState(member?: Member): FormState {
     last_name: member?.last_name ?? '',
     sex_id: member?.sex_id ?? '',
     marital_status_id: member?.marital_status_id ?? '',
+    date_birthday: member?.date_birthday ?? '',
+    national_id: member?.national_id ?? '',
+    date_salvation: member?.date_salvation ?? '',
+    date_baptism: member?.date_baptism ?? '',
+    member_since: member?.member_since ?? '',
     fathers_name: member?.fathers_name ?? '',
     mothers_name: member?.mothers_name ?? '',
     // These three are plain many-to-many with no pivot data, so they round-trip
@@ -114,8 +124,13 @@ function toPayload(form: FormState): MemberPayload {
     marital_status_id: Number(form.marital_status_id),
     talent: form.talent,
     spiritual_gift: form.spiritual_gift,
+    date_birthday: form.date_birthday,
   };
 
+  if (form.national_id.trim()) payload.national_id = form.national_id.trim();
+  if (form.date_salvation) payload.date_salvation = form.date_salvation;
+  if (form.date_baptism) payload.date_baptism = form.date_baptism;
+  if (form.member_since) payload.member_since = form.member_since;
   if (form.fathers_name.trim()) payload.fathers_name = form.fathers_name.trim();
   if (form.mothers_name.trim()) payload.mothers_name = form.mothers_name.trim();
   if (form.employed) payload.employed = form.employed === 'yes';
@@ -213,6 +228,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
     form.last_name.trim().length > 0 &&
     form.sex_id !== '' &&
     form.marital_status_id !== '' &&
+    form.date_birthday !== '' &&
     form.talent.length > 0 &&
     form.spiritual_gift.length > 0 &&
     mobileValid;
@@ -296,21 +312,51 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 <option value="no">No</option>
               </select>
             </Field>
+            <Field label="Date of Birth" required span={4}>
+              <input
+                className="input"
+                type="date"
+                value={form.date_birthday}
+                onChange={(e) => set('date_birthday', e.target.value)}
+              />
+            </Field>
+            <Field label="National ID" span={8}>
+              <Inp value={form.national_id} onChange={(v) => set('national_id', v)} />
+            </Field>
             <Field label="Father's Name" span={6}>
               <Inp value={form.fathers_name} onChange={(v) => set('fathers_name', v)} />
             </Field>
             <Field label="Mother's Name" span={6}>
               <Inp value={form.mothers_name} onChange={(v) => set('mothers_name', v)} />
             </Field>
+            <Field label="Date of Salvation" span={4}>
+              <input
+                className="input"
+                type="date"
+                value={form.date_salvation}
+                onChange={(e) => set('date_salvation', e.target.value)}
+              />
+            </Field>
+            <Field label="Date of Baptism" span={4}>
+              <input
+                className="input"
+                type="date"
+                value={form.date_baptism}
+                onChange={(e) => set('date_baptism', e.target.value)}
+              />
+            </Field>
+            <Field label="Member Since" span={4}>
+              <input
+                className="input"
+                type="date"
+                value={form.member_since}
+                onChange={(e) => set('member_since', e.target.value)}
+              />
+            </Field>
 
             {isMarried && (
               <div className="field field-col-12" style={{ marginTop: 8 }}>
                 <SectionTitle>Family Members</SectionTitle>
-                <div className="state-banner info">
-                  Placeholder only — the backend has no way to store spouse or children records yet, so this
-                  section won't be saved when you submit. It's here so the design is ready once that support
-                  is added.
-                </div>
                 <FamilyMemberEntries
                   entries={form.family_members}
                   onChange={(entries) => set('family_members', entries)}
@@ -525,8 +571,8 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
             {!canSubmit && (
               <div className="field field-col-12">
                 <div className="state-banner info">
-                  First name, last name, sex, marital status, at least one talent, and at least one spiritual gift
-                  are required before this can be submitted.
+                  First name, last name, sex, marital status, date of birth, at least one talent, and at least one
+                  spiritual gift are required before this can be submitted.
                   {!mobileValid && ' The mobile number also has letters in it — numbers only.'}
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type Route = 'welcome' | 'register' | 'directory' | 'profile' | 'edit';
+export type Route = 'welcome' | 'register' | 'directory' | 'profile' | 'edit' | 'families' | 'admin';
 
 export function Logo({ size = 52 }: { size?: number }) {
   return (
@@ -27,6 +27,9 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   trash: <><path d="M4 7h16" /><path d="M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13" /><path d="M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></>,
   eye: <><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" /></>,
   edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z" /></>,
+  'chevron-down': <path d="M6 9l6 6 6-6" />,
+  close: <path d="M6 6l12 12M18 6L6 18" />,
+  copy: <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></>,
 };
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -56,11 +59,29 @@ export function Clock() {
 
 interface AppHeaderProps {
   setRoute: (r: Route) => void;
-  userName?: string;
+  userEmail?: string;
   onLogout?: () => void;
+  currentRoute?: Route;
+  isAdmin?: boolean;
 }
 
-export function AppHeader({ setRoute, userName, onLogout }: AppHeaderProps) {
+// Backend `name` is often a role label (e.g. "Super Admin") rather than a
+// person's name, so the header derives a display name from the email instead.
+function nameFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? '';
+  const words = local.replace(/[._-]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return email;
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+const NAV_ITEMS: { route: Route; label: string; adminOnly?: boolean }[] = [
+  { route: 'directory', label: 'Members' },
+  { route: 'families', label: 'Families' },
+  { route: 'admin', label: 'Users', adminOnly: true },
+];
+
+export function AppHeader({ setRoute, userEmail, onLogout, currentRoute, isAdmin }: AppHeaderProps) {
+  const showNav = Boolean(onLogout);
   return (
     <header className="app-header">
       <div className="app-header-inner">
@@ -72,15 +93,31 @@ export function AppHeader({ setRoute, userName, onLogout }: AppHeaderProps) {
           </div>
         </div>
 
-        <div className="app-title">
-          <span className="ornament">✦</span>
-          Database of Church Members
-          <span className="ornament">✦</span>
-        </div>
+        {showNav ? (
+          <nav className="nav-tabs">
+            {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => (
+              <button
+                key={item.route}
+                className={'nav-tab' + (currentRoute === item.route ? ' active' : '')}
+                onClick={() => setRoute(item.route)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        ) : (
+          <div className="app-title">
+            <span className="ornament">✦</span>
+            Database of Church Members
+            <span className="ornament">✦</span>
+          </div>
+        )}
 
         {onLogout && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifySelf: 'end' }}>
-            {userName && <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>{userName}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, justifySelf: 'end' }}>
+            {userEmail && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{nameFromEmail(userEmail)}</span>
+            )}
             <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sign out</button>
           </div>
         )}

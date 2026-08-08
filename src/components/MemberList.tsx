@@ -1,15 +1,24 @@
-import { useMemo, useState } from 'react';
-import type { Member } from '../types/member';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Member, MemberFilters } from '../types/member';
 import { Icon } from './Layout';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS } from '../data/constants';
+import { MemberFiltersPanel } from './form/MemberFilters';
 
 interface DirectoryProps {
   members: Member[];
   loading: boolean;
   error: string | null;
+  filters: MemberFilters;
+  onFiltersChange: (filters: MemberFilters) => void;
   onNewMember: () => void;
   onViewMember: (id: number) => void;
   onEditMember: (id: number) => void;
+}
+
+function countActiveFilters(filters: MemberFilters): number {
+  return Object.values(filters).filter((value) =>
+    Array.isArray(value) ? value.length > 0 : value !== undefined && value !== '',
+  ).length;
 }
 
 function lookupName(options: { id: number; name: string }[], id: number | null): string {
@@ -25,9 +34,32 @@ function namesOf(list: { name: string }[]): string {
   return list.length > 0 ? list.map((l) => l.name).join(', ') : '—';
 }
 
-export function MemberList({ members, loading, error, onNewMember, onViewMember, onEditMember }: DirectoryProps) {
+export function MemberList({
+  members,
+  loading,
+  error,
+  filters,
+  onFiltersChange,
+  onNewMember,
+  onViewMember,
+  onEditMember,
+}: DirectoryProps) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
+  const [showFilters, setShowFilters] = useState(false);
+  const activeFilterCount = countActiveFilters(filters);
+  const filtersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showFilters) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+        setShowFilters(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showFilters]);
 
   const departmentFilters = useMemo(() => {
     const names = new Set<string>();
@@ -62,6 +94,29 @@ export function MemberList({ members, loading, error, onNewMember, onViewMember,
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
+            <div className="filters-dropdown-wrap" ref={filtersRef}>
+              <button
+                className={'btn btn-sm ' + (showFilters || activeFilterCount > 0 ? 'btn-primary' : 'btn-outline')}
+                onClick={() => setShowFilters((v) => !v)}
+              >
+                <Icon name="search" size={12} /> Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                <Icon name="chevron-down" size={12} />
+              </button>
+
+              {showFilters && (
+                <MemberFiltersPanel
+                  value={filters}
+                  onApply={(next) => {
+                    onFiltersChange(next);
+                    setShowFilters(false);
+                  }}
+                  onClear={() => {
+                    onFiltersChange({});
+                    setShowFilters(false);
+                  }}
+                />
+              )}
+            </div>
             <button className="btn btn-primary btn-sm" onClick={onNewMember}>
               <Icon name="plus" size={12} /> New Member
             </button>
