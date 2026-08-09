@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from './client';
+import { apiGet, apiGetWithMeta, apiPost, apiPut, type PageMeta } from './client';
 import type { Member, MemberPayload, MemberFilters } from '../types/member';
 
 const BASE = '/members';
@@ -29,8 +29,27 @@ function buildMemberQuery(filters: MemberFilters): string {
   return query ? `?${query}` : '';
 }
 
+// The backend list endpoint paginates (default 20 per page). The directory
+// paginates on the client, so request the max page size (100) to load the full
+// working set in one call. Callers can still override via filters.per_page.
+const MEMBERS_PAGE_SIZE = 100;
+
 export const getMembers = (filters: MemberFilters = {}): Promise<Member[]> =>
-  apiGet(`${BASE}${buildMemberQuery(filters)}`);
+  apiGet(`${BASE}${buildMemberQuery({ per_page: MEMBERS_PAGE_SIZE, ...filters })}`);
+
+export interface MembersPage {
+  members: Member[];
+  meta: PageMeta | null;
+}
+
+// Real server-side page fetch (as opposed to getMembers' bulk load above) —
+// used by the directory table so Next/Prev actually round-trips to the
+// backend for that page instead of just re-slicing an already-loaded array.
+export const getMembersPage = (filters: MemberFilters): Promise<MembersPage> =>
+  apiGetWithMeta<Member[]>(`${BASE}${buildMemberQuery(filters)}`).then(({ data, meta }) => ({
+    members: data,
+    meta,
+  }));
 
 export const getMember = (id: number): Promise<Member> => apiGet(`${BASE}/${id}`);
 

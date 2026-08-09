@@ -6,12 +6,30 @@ import { MemberForm } from './components/MemberForm';
 import { MemberProfile } from './components/MemberProfile';
 import { Families } from './components/Families';
 import { AdminUsers } from './components/AdminUsers';
+import { ResetPassword } from './components/ResetPassword';
+import { TempPasswordBanner } from './components/TempPasswordBanner';
+import { FamilySetup } from './components/FamilySetup';
 import { useMembers } from './hooks/useMembers';
 import { useAuth } from './context/AuthContext';
-import type { MemberFilters } from './types/member';
+import { MARITAL_STATUS_OPTIONS } from './data/constants';
+import type { Member, MemberFilters } from './types/member';
+
+function isResetPasswordRoute(): boolean {
+  return window.location.pathname.replace(/\/+$/, '') === '/reset-password';
+}
+
+function isMarriedMember(member: Member): boolean {
+  return MARITAL_STATUS_OPTIONS.find((option) => option.id === member.marital_status_id)?.name === 'MARRIED';
+}
 
 export function App() {
   const { isAuthenticated, user, login, logout, loggingIn, loginError } = useAuth();
+
+  // The password-reset link is a standalone screen reachable from an email while
+  // signed out, so it's resolved before the authentication gate below.
+  if (isResetPasswordRoute()) {
+    return <ResetPassword />;
+  }
   const [memberFilters, setMemberFilters] = useState<MemberFilters>({});
   const { members, loading, error, addMember, editMember, getMemberById } = useMembers(
     isAuthenticated,
@@ -19,6 +37,7 @@ export function App() {
   );
   const [route, setRoute] = useState<Route>('welcome');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [familySeedMember, setFamilySeedMember] = useState<Member | null>(null);
 
   const isAdmin = user?.role === 'admin';
   const selectedMember = selectedId !== null ? getMemberById(selectedId) : undefined;
@@ -75,6 +94,7 @@ export function App() {
     <>
       <div className="app-bg" />
       <div className="app-shell">
+        {user?.must_change_password && <TempPasswordBanner email={user.email} />}
         {route === 'welcome' ? (
           <>
             <AppHeader
@@ -130,8 +150,26 @@ export function App() {
               {route === 'register' && (
                 <MemberForm
                   onSubmit={addMember}
-                  onSuccess={(saved) => openProfile(saved.id)}
+                  onSuccess={(saved) => {
+                    if (isMarriedMember(saved)) {
+                      setFamilySeedMember(saved);
+                      setRoute('family-setup');
+                    } else {
+                      openProfile(saved.id);
+                    }
+                  }}
                   onCancel={() => setRoute('directory')}
+                />
+              )}
+
+              {route === 'family-setup' && familySeedMember && (
+                <FamilySetup
+                  member={familySeedMember}
+                  members={members}
+                  onDone={(id) => {
+                    setFamilySeedMember(null);
+                    openProfile(id);
+                  }}
                 />
               )}
 

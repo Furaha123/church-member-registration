@@ -54,6 +54,8 @@ function toggleId(list: number[], id: number): number[] {
   return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 }
 
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
+
 export function MemberFiltersPanel({ value, onApply, onClear }: MemberFiltersPanelProps) {
   const { departments } = useLookups();
   const [draft, setDraft] = useState<Draft>(() => toDraft(value));
@@ -75,6 +77,7 @@ export function MemberFiltersPanel({ value, onApply, onClear }: MemberFiltersPan
           <input
             className="input"
             type="date"
+            max={TODAY_ISO}
             value={draft.date_birthday_from}
             onChange={(e) => set('date_birthday_from', e.target.value)}
           />
@@ -84,6 +87,7 @@ export function MemberFiltersPanel({ value, onApply, onClear }: MemberFiltersPan
           <input
             className="input"
             type="date"
+            max={TODAY_ISO}
             value={draft.date_birthday_to}
             onChange={(e) => set('date_birthday_to', e.target.value)}
           />

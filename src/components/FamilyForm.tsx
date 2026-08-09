@@ -11,6 +11,10 @@ interface FamilyFormProps {
   onSubmit: (data: FamilyPayload) => Promise<Family>;
   onSuccess: (family: Family) => void;
   onCancel: () => void;
+  // Pre-fill values for creating a NEW family (e.g. seeded from the member who
+  // was just registered). Ignored when `family` is provided (edit mode).
+  seedName?: string;
+  seedMembers?: FamilyMemberInput[];
 }
 
 interface FormState {
@@ -20,9 +24,9 @@ interface FormState {
   members: FamilyMemberInput[];
 }
 
-function initialState(family?: Family): FormState {
+function initialState(family: Family | undefined, seedName?: string, seedMembers?: FamilyMemberInput[]): FormState {
   return {
-    family_name: family?.family_name ?? '',
+    family_name: family?.family_name ?? seedName ?? '',
     address: family?.address ?? '',
     date_formed: family?.date_formed ?? '',
     members:
@@ -31,7 +35,7 @@ function initialState(family?: Family): FormState {
         role_type: m.role_type,
         start_date: m.start_date ?? undefined,
         end_date: m.end_date ?? undefined,
-      })) ?? [],
+      })) ?? seedMembers ?? [],
   };
 }
 
@@ -51,8 +55,8 @@ function memberLabel(member: Member): string {
   return `${member.first_name} ${member.last_name} (#${member.id})`;
 }
 
-export function FamilyForm({ family, members, onSubmit, onSuccess, onCancel }: FamilyFormProps) {
-  const [form, setForm] = useState<FormState>(() => initialState(family));
+export function FamilyForm({ family, members, onSubmit, onSuccess, onCancel, seedName, seedMembers }: FamilyFormProps) {
+  const [form, setForm] = useState<FormState>(() => initialState(family, seedName, seedMembers));
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});

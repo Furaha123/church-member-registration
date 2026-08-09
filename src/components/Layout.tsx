@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type Route = 'welcome' | 'register' | 'directory' | 'profile' | 'edit' | 'families' | 'admin';
+export type Route = 'welcome' | 'register' | 'directory' | 'profile' | 'edit' | 'families' | 'admin' | 'family-setup';
 
 export function Logo({ size = 52 }: { size?: number }) {
   return (

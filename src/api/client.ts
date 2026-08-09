@@ -59,7 +59,39 @@ function unwrap<T>(body: unknown): T {
   return body as T;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// A paginated ResourceCollection (e.g. GET /v1/members) additionally carries a
+// top-level "meta" block from Laravel's paginator.
+export interface PageMeta {
+  currentPage: number;
+  lastPage: number;
+  perPage: number;
+  total: number;
+}
+
+interface RawPageMeta {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+}
+
+function extractMeta(body: unknown): PageMeta | null {
+  if (typeof body !== 'object' || body === null || !('meta' in body)) return null;
+  const meta = (body as { meta: unknown }).meta;
+  if (typeof meta !== 'object' || meta === null) return null;
+  const m = meta as Partial<RawPageMeta>;
+  if (
+    typeof m.current_page !== 'number' ||
+    typeof m.last_page !== 'number' ||
+    typeof m.per_page !== 'number' ||
+    typeof m.total !== 'number'
+  ) {
+    return null;
+  }
+  return { currentPage: m.current_page, lastPage: m.last_page, perPage: m.per_page, total: m.total };
+}
+
+async function requestRaw(path: string, options: RequestInit = {}): Promise<unknown> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
@@ -94,14 +126,32 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    return undefined;
   }
 
-  const body: unknown = await response.json();
+  return await response.json();
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const body = await requestRaw(path, options);
   return unwrap<T>(body);
 }
 
+export interface WithMeta<T> {
+  data: T;
+  meta: PageMeta | null;
+}
+
+async function requestWithMeta<T>(path: string, options: RequestInit = {}): Promise<WithMeta<T>> {
+  const body = await requestRaw(path, options);
+  return { data: unwrap<T>(body), meta: extractMeta(body) };
+}
+
 export const apiGet = <T>(path: string): Promise<T> => request<T>(path);
+
+// Like apiGet, but also surfaces the paginator's "meta" block (current_page,
+// last_page, per_page, total) for endpoints that page server-side.
+export const apiGetWithMeta = <T>(path: string): Promise<WithMeta<T>> => requestWithMeta<T>(path);
 
 export const apiPost = <T>(path: string, body: unknown): Promise<T> =>
   request<T>(path, { method: 'POST', body: JSON.stringify(body) });

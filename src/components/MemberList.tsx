@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Member, MemberFilters } from '../types/member';
 import { Icon } from './Layout';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS } from '../data/constants';
 import { MemberFiltersPanel } from './form/MemberFilters';
+import { getMembersPage } from '../api/members';
 
 interface DirectoryProps {
   members: Member[];
@@ -14,6 +15,8 @@ interface DirectoryProps {
   onViewMember: (id: number) => void;
   onEditMember: (id: number) => void;
 }
+
+const PAGE_SIZE = 5;
 
 function countActiveFilters(filters: MemberFilters): number {
   return Object.values(filters).filter((value) =>
@@ -45,10 +48,10 @@ export function MemberList({
   onEditMember,
 }: DirectoryProps) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
   const activeFilterCount = countActiveFilters(filters);
   const filtersRef = useRef<HTMLDivElement>(null);
+  const isSearching = search.trim() !== '';
 
   useEffect(() => {
     if (!showFilters) return;
@@ -61,15 +64,11 @@ export function MemberList({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showFilters]);
 
-  const departmentFilters = useMemo(() => {
-    const names = new Set<string>();
-    members.forEach((m) => m.departments.forEach((d) => names.add(d.name)));
-    return ['All', ...Array.from(names).sort()];
-  }, [members]);
-
-  const visible = members.filter((m) => {
-    if (filter !== 'All' && !m.departments.some((d) => d.name === filter)) return false;
-    if (!search) return true;
+  // Free-text search spans fields (mobile, email, talent) the backend filter
+  // doesn't support, so it runs client-side over the already-loaded `members`
+  // and paginates that filtered set in memory — no extra round trip per page.
+  const searched = members.filter((m) => {
+    if (!isSearching) return true;
     const q = search.toLowerCase();
     const haystack = [
       m.first_name,
@@ -82,6 +81,74 @@ export function MemberList({
     return haystack.some((f) => f?.toLowerCase().includes(q));
   });
 
+  const [searchPageIndex, setSearchPageIndex] = useState(0);
+  const searchPageCount = Math.max(1, Math.ceil(searched.length / PAGE_SIZE));
+  const currentSearchPage = Math.min(searchPageIndex, searchPageCount - 1);
+  const searchedPageMembers = searched.slice(
+    currentSearchPage * PAGE_SIZE,
+    currentSearchPage * PAGE_SIZE + PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setSearchPageIndex(0);
+  }, [search, members]);
+
+  // Outside of an active search, the table pages the real backend (page/per_page
+  // params) so Next/Prev genuinely round-trips instead of re-slicing a local array.
+  const [serverPage, setServerPage] = useState(1);
+  const [serverMembers, setServerMembers] = useState<Member[]>([]);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverLastPage, setServerLastPage] = useState(1);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  const filtersKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    setServerPage(1);
+  }, [filtersKey]);
+
+  useEffect(() => {
+    if (isSearching) return;
+    let cancelled = false;
+    setPageLoading(true);
+    setPageError(null);
+    getMembersPage({ ...(JSON.parse(filtersKey) as MemberFilters), page: serverPage, per_page: PAGE_SIZE })
+      .then(({ members: pageMembers, meta }) => {
+        if (cancelled) return;
+        setServerMembers(pageMembers);
+        setServerTotal(meta?.total ?? pageMembers.length);
+        setServerLastPage(meta?.lastPage ?? 1);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPageError(err instanceof Error ? err.message : 'Failed to load members.');
+      })
+      .finally(() => {
+        if (!cancelled) setPageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSearching, filtersKey, serverPage]);
+
+  const pagedMembers = isSearching ? searchedPageMembers : serverMembers;
+  const totalCount = isSearching ? searched.length : serverTotal;
+  const currentPage = isSearching ? currentSearchPage : serverPage - 1;
+  const pageCount = isSearching ? searchPageCount : serverLastPage;
+  const firstShown = totalCount === 0 ? 0 : currentPage * PAGE_SIZE + 1;
+  const lastShown = Math.min(totalCount, currentPage * PAGE_SIZE + pagedMembers.length);
+  const tableLoading = isSearching ? loading : pageLoading;
+  const tableError = isSearching ? error : pageError ?? error;
+
+  function goToPage(nextPage: number): void {
+    if (isSearching) {
+      setSearchPageIndex(nextPage);
+    } else {
+      setServerPage(nextPage + 1);
+    }
+  }
+
   return (
     <>
       <div className="card">
@@ -90,7 +157,7 @@ export function MemberList({
             <div className="eyebrow">Members</div>
             <h2 className="card-title">Member Directory</h2>
             <div className="card-sub">
-              Showing <strong style={{ color: 'var(--gold-300)' }}>{visible.length}</strong> of {members.length} members enrolled.
+              Showing <strong style={{ color: 'var(--gold-300)' }}>{totalCount}</strong> members enrolled.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -123,7 +190,7 @@ export function MemberList({
           </div>
         </div>
 
-        {error && <div className="state-banner error">Couldn't load members: {error}</div>}
+        {tableError && <div className="state-banner error">Couldn't load members: {tableError}</div>}
 
         <div className="directory-toolbar">
           <div className="search">
@@ -134,17 +201,12 @@ export function MemberList({
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="filter-pills">
-            {departmentFilters.map((f) => (
-              <button key={f} className={'pill' + (filter === f ? ' active' : '')} onClick={() => setFilter(f)}>
-                {f}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {loading ? (
-          <div className="checklist-empty">Loading members…</div>
+        {tableLoading ? (
+          <div className="checklist-empty">
+            <span className="spinner" aria-hidden="true" /> Loading members…
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="member-table">
@@ -160,7 +222,7 @@ export function MemberList({
                 </tr>
               </thead>
               <tbody>
-                {visible.map((m) => (
+                {pagedMembers.map((m) => (
                   <tr key={m.id}>
                     <td>
                       <div className="member-cell">
@@ -207,15 +269,55 @@ export function MemberList({
                     </td>
                   </tr>
                 ))}
-                {visible.length === 0 && (
+                {pagedMembers.length === 0 && (
                   <tr>
                     <td colSpan={7} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
-                      No members match your search.
+                      {isSearching ? 'No members match your search.' : 'No members found.'}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+
+            {pagedMembers.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  marginTop: 16,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ fontSize: 13, color: 'var(--cream-faint)' }}>
+                  Showing {firstShown}–{lastShown} of {totalCount}
+                </div>
+                {pageCount > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 0}
+                    >
+                      ← Prev
+                    </button>
+                    <span style={{ fontSize: 13, color: 'var(--cream-dim)' }}>
+                      Page {currentPage + 1} of {pageCount}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage >= pageCount - 1}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

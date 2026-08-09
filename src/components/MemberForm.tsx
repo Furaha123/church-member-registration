@@ -7,7 +7,6 @@ import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/const
 import { MultiSelectChecklist } from './form/MultiSelectChecklist';
 import { EducationEntries } from './form/EducationEntries';
 import { DepartmentEntries } from './form/DepartmentEntries';
-import { FamilyMemberEntries, type FamilyMemberEntry } from './form/FamilyMemberEntries';
 import { ApiError } from '../api/client';
 
 interface MemberFormProps {
@@ -43,9 +42,7 @@ interface FormState {
   village_id: number | '';
   cell_id: number | '';
   department: DepartmentEntry[];
-  // Placeholder only — see FamilyMemberEntries.tsx. Never sent to the API.
-  family_members: FamilyMemberEntry[];
-  // Placeholders too: free-text fallbacks for when the lookup lists don't have
+  // Placeholders: free-text fallbacks for when the lookup lists don't have
   // what the user needs. talent/occupation/spiritual_gift only accept ids that
   // already exist in their lookup tables (`exists:talent,id` etc.), so there's
   // no backend field to send a custom value to yet. Kept local-only for now.
@@ -58,6 +55,13 @@ interface FormState {
 // no format rule — so this is a frontend-only guard against typing plain text
 // (e.g. lorem-ipsum placeholder data) into a phone number field.
 const PHONE_PATTERN = /^[0-9+\-\s()]+$/;
+
+// Basic client-side email shape check so an invalid address is caught before the
+// server round-trip. The backend's `email` rule remains the source of truth.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Key dates can never be in the future, so date inputs are capped at today.
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
 
 const STEPS = [
   { id: 1, label: 'Personal' },
@@ -107,9 +111,6 @@ function initialFormState(member?: Member): FormState {
     cellule_id: member?.cellule_id ?? '',
     village_id: member?.village_id ?? '',
     cell_id: member?.cell_id ?? '',
-    // Always starts empty: the backend has nowhere to persist this yet, so
-    // there's nothing to load back in even when editing an existing member.
-    family_members: [],
     talentOther: '',
     spiritualGiftOther: '',
     occupationOther: '',
@@ -188,15 +189,24 @@ function Inp({ value, onChange, type = 'text', placeholder }: {
   );
 }
 
-function Stepper({ current, setStep }: { current: number; setStep: (n: number) => void }) {
+function Stepper({
+  current,
+  setStep,
+  isComplete,
+}: {
+  current: number;
+  setStep: (n: number) => void;
+  isComplete: (id: number) => boolean;
+}) {
   return (
     <div className="stepper">
       {STEPS.map((s) => {
-        const cls = s.id === current ? 'active' : s.id < current ? 'done' : '';
+        const done = isComplete(s.id) && s.id !== current;
+        const cls = s.id === current ? 'active' : done ? 'done' : '';
         return (
           <div key={s.id} className={'step ' + cls} onClick={() => setStep(s.id)}>
             <div className="step-dot">
-              {s.id < current ? <Icon name="check" size={18} /> : String(s.id).padStart(2, '0')}
+              {done ? <Icon name="check" size={18} /> : String(s.id).padStart(2, '0')}
             </div>
             <div className="step-label">{s.label}</div>
           </div>
@@ -213,6 +223,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [agreed, setAgreed] = useState(false);
 
   const geo = useGeographyCascade(form.province_id, form.district_id, form.sector_id, form.cellule_id);
 
@@ -221,17 +232,35 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   }
 
   const isEditing = Boolean(member);
-  const isMarried = MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name === 'MARRIED';
   const mobileValid = form.mobile_tel.trim() === '' || PHONE_PATTERN.test(form.mobile_tel.trim());
-  const canSubmit =
+  const emailValid = form.email.trim() === '' || EMAIL_PATTERN.test(form.email.trim());
+  const dobValid = form.date_birthday === '' || form.date_birthday <= TODAY_ISO;
+  const requiredFilled =
     form.first_name.trim().length > 0 &&
     form.last_name.trim().length > 0 &&
     form.sex_id !== '' &&
     form.marital_status_id !== '' &&
     form.date_birthday !== '' &&
     form.talent.length > 0 &&
-    form.spiritual_gift.length > 0 &&
-    mobileValid;
+    form.spiritual_gift.length > 0;
+  const canSubmit = requiredFilled && mobileValid && emailValid && dobValid && agreed;
+
+  const step1Complete =
+    form.first_name.trim().length > 0 &&
+    form.last_name.trim().length > 0 &&
+    form.sex_id !== '' &&
+    form.marital_status_id !== '' &&
+    form.date_birthday !== '' &&
+    dobValid;
+  const step2Complete = form.talent.length > 0 && form.spiritual_gift.length > 0;
+  const step3Complete = step1Complete && step2Complete && emailValid && mobileValid;
+
+  function isStepComplete(id: number): boolean {
+    if (id === 1) return step1Complete;
+    if (id === 2) return step2Complete;
+    if (id === 3) return step3Complete;
+    return false;
+  }
 
   async function handleSubmit() {
     if (!canSubmit || submitting) return;
@@ -265,7 +294,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
         </div>
       </div>
 
-      <Stepper current={step} setStep={setStep} />
+      <Stepper current={step} setStep={setStep} isComplete={isStepComplete} />
 
       {lookups.error && (
         <div className="state-banner error">Couldn't load form options: {lookups.error}</div>
@@ -316,6 +345,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               <input
                 className="input"
                 type="date"
+                max={TODAY_ISO}
                 value={form.date_birthday}
                 onChange={(e) => set('date_birthday', e.target.value)}
               />
@@ -333,6 +363,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               <input
                 className="input"
                 type="date"
+                max={TODAY_ISO}
                 value={form.date_salvation}
                 onChange={(e) => set('date_salvation', e.target.value)}
               />
@@ -341,6 +372,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               <input
                 className="input"
                 type="date"
+                max={TODAY_ISO}
                 value={form.date_baptism}
                 onChange={(e) => set('date_baptism', e.target.value)}
               />
@@ -349,20 +381,11 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               <input
                 className="input"
                 type="date"
+                max={TODAY_ISO}
                 value={form.member_since}
                 onChange={(e) => set('member_since', e.target.value)}
               />
             </Field>
-
-            {isMarried && (
-              <div className="field field-col-12" style={{ marginTop: 8 }}>
-                <SectionTitle>Family Members</SectionTitle>
-                <FamilyMemberEntries
-                  entries={form.family_members}
-                  onChange={(entries) => set('family_members', entries)}
-                />
-              </div>
-            )}
           </div>
         </>
       )}
@@ -558,7 +581,6 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                   ['Occupations', String(form.occupation.length)],
                   ['Education', String(form.education.length)],
                   ['Departments', String(form.department.length)],
-                  ...(isMarried ? [['Family Members (not saved)', String(form.family_members.length)]] : []),
                 ].map(([k, v]) => (
                   <div key={k}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--cream-faint)' }}>{k}</div>
@@ -571,9 +593,18 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
             {!canSubmit && (
               <div className="field field-col-12">
                 <div className="state-banner info">
-                  First name, last name, sex, marital status, date of birth, at least one talent, and at least one
-                  spiritual gift are required before this can be submitted.
-                  {!mobileValid && ' The mobile number also has letters in it — numbers only.'}
+                  {!requiredFilled && (
+                    <div>
+                      First name, last name, sex, marital status, date of birth, at least one talent, and at least
+                      one spiritual gift are required before this can be submitted.
+                    </div>
+                  )}
+                  {!dobValid && <div>Date of birth can't be in the future — please pick a valid date.</div>}
+                  {!emailValid && <div>The email address isn't valid (check it on the Contact step).</div>}
+                  {!mobileValid && <div>The mobile number has invalid characters — numbers only (Contact step).</div>}
+                  {requiredFilled && dobValid && emailValid && mobileValid && !agreed && (
+                    <div>Please tick the confirmation box below to submit.</div>
+                  )}
                 </div>
               </div>
             )}
@@ -581,13 +612,14 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
             {submitError && (
               <div className="field field-col-12">
                 <div className="state-banner error">
-                  {submitError}
-                  {Object.keys(fieldErrors).length > 0 && (
-                    <ul style={{ marginTop: 8, paddingLeft: 18 }}>
+                  {Object.keys(fieldErrors).length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
                       {Object.entries(fieldErrors).map(([field, messages]) => (
                         <li key={field}>{messages.join(' ')}</li>
                       ))}
                     </ul>
+                  ) : (
+                    submitError
                   )}
                 </div>
               </div>
@@ -595,7 +627,12 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
 
             <div className="field field-col-12">
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, color: 'var(--cream-dim)', fontSize: 13, lineHeight: 1.7, padding: '14px 0', cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ accentColor: 'var(--gold-500)', marginTop: 4 }} />
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  style={{ accentColor: 'var(--gold-500)', marginTop: 4 }}
+                />
                 <span>I confirm this information is correct and agree to it being stored in the church member database.</span>
               </label>
             </div>

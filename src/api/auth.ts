@@ -31,3 +31,15 @@ export const forgotPassword = (email: string): Promise<void> =>
 
 export const resetPassword = (payload: ResetPasswordPayload): Promise<void> =>
   apiPost('/password/reset', payload);
+
+// POST /v1/password/change (auth:sanctum) — lets a signed-in user set their own
+// password without a reset token/email. Used to clear a temporary password.
+// Requires the matching backend endpoint:
+//   body { password, password_confirmation } -> returns the updated user.
+export interface ChangePasswordPayload {
+  password: string;
+  password_confirmation: string;
+}
+
+export const changePassword = (payload: ChangePasswordPayload): Promise<User> =>
+  apiPost('/password/change', payload);

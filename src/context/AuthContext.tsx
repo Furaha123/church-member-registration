@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { login as apiLogin, logout as apiLogout } from '../api/auth';
+import { login as apiLogin, logout as apiLogout, changePassword as apiChangePassword } from '../api/auth';
 import { ApiError, getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import type { User } from '../types/user';
 
@@ -20,6 +20,7 @@ interface AuthContextValue {
   loginError: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (password: string, passwordConfirmation: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -78,9 +79,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clearSession]);
 
+  const changePassword = useCallback(
+    async (password: string, passwordConfirmation: string): Promise<void> => {
+      const updated = await apiChangePassword({ password, password_confirmation: passwordConfirmation });
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+      setUser(updated);
+    },
+    [],
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: user !== null, loggingIn, loginError, login, logout }),
-    [user, loggingIn, loginError, login, logout],
+    () => ({ user, isAuthenticated: user !== null, loggingIn, loginError, login, logout, changePassword }),
+    [user, loggingIn, loginError, login, logout, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

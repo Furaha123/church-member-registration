@@ -113,4 +113,6 @@ export interface MemberFilters {
   date_birthday_from?: string;
   date_birthday_to?: string;
   employed?: boolean;
+  page?: number;
+  per_page?: number;
 }

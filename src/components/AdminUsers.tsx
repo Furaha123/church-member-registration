@@ -136,9 +136,10 @@ export function AdminUsers({ currentUserId }: AdminUsersProps) {
             {createdResult ? (
               <>
                 <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                  <strong>{createdResult.user.name}</strong> ({createdResult.user.email}) was created. There is no
-                  welcome email — copy this temporary password and share it securely. It is shown only once, and
-                  the user must change it on first sign-in.
+                  <strong>{createdResult.user.name}</strong> ({createdResult.user.email}) was created and a welcome
+                  email with this temporary password has been sent to them. You can also copy it below to share
+                  securely as a backup. It's shown here only once, and the user must set their own password on first
+                  sign-in.
                 </p>
 
                 <div className="field" style={{ marginTop: 16 }}>
