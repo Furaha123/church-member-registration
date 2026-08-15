@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { NamedLookup } from '../../types/lookup';
 import type { EducationEntry } from '../../types/member';
-import { getFacultiesForEducation } from '../../api/lookups';
+import { getFacultiesForEducation, createFacultyForEducation } from '../../api/lookups';
 import { MultiSelectChecklist } from './MultiSelectChecklist';
+import { AddOtherField } from './AddOtherField';
 import { Icon } from '../Layout';
 
 interface EducationEntriesProps {
@@ -100,6 +101,17 @@ function EducationEntryCard({ index, entry, educations, onUpdate, onRemove }: Ed
           onChange={(ids) => onUpdate({ faculty: ids })}
           placeholder={`Search ${faculties.length} options…`}
           emptyText={entry.education_id ? 'No fields of study for this education level.' : 'Select an education level first.'}
+        />
+        <AddOtherField
+          label="Not on the list?"
+          placeholder="Add a field of study for this level"
+          disabled={!entry.education_id}
+          disabledHint="select an education level first"
+          onCreate={(name) => createFacultyForEducation(entry.education_id, name)}
+          onAdded={(created) => {
+            setFaculties((prev) => [...prev, created]);
+            onUpdate({ faculty: [...entry.faculty, created.id] });
+          }}
         />
       </div>
     </div>

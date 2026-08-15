@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Logo, Icon } from './Layout';
-import { CELL_OPTIONS } from '../data/constants';
 import { forgotPassword } from '../api/auth';
 import { ApiError } from '../api/client';
 import type { User } from '../types/user';
@@ -10,8 +9,6 @@ interface WelcomeProps {
   onRegisterNew: () => void;
   onViewFamilies: () => void;
   onManageUsers: () => void;
-  totalMembers: number;
-  totalDepartments: number;
   isAuthenticated: boolean;
   user: User | null;
   onLogin: (email: string, password: string) => Promise<void>;
@@ -24,8 +21,6 @@ export function Welcome({
   onRegisterNew,
   onViewFamilies,
   onManageUsers,
-  totalMembers,
-  totalDepartments,
   isAuthenticated,
   user,
   onLogin,
@@ -80,20 +75,6 @@ export function Welcome({
         <div className="scripture">
           <div className="verse">"Rejoice that your names are written in heaven."</div>
           <div className="ref">— Luke 10:20</div>
-        </div>
-        <div className="welcome-stats">
-          <div className="stat">
-            <div className="num">{totalMembers}</div>
-            <div className="lbl">Members Registered</div>
-          </div>
-          <div className="stat">
-            <div className="num">{totalDepartments}</div>
-            <div className="lbl">Departments</div>
-          </div>
-          <div className="stat">
-            <div className="num">{CELL_OPTIONS.length}</div>
-            <div className="lbl">Church Cells</div>
-          </div>
         </div>
       </div>
 

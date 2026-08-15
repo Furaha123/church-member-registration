@@ -5,8 +5,11 @@ import { useLookups } from '../hooks/useLookups';
 import { useGeographyCascade } from '../hooks/useGeographyCascade';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
 import { MultiSelectChecklist } from './form/MultiSelectChecklist';
+import { AddOtherField } from './form/AddOtherField';
 import { EducationEntries } from './form/EducationEntries';
 import { DepartmentEntries } from './form/DepartmentEntries';
+import { createTalent, createSpiritualGift, createOccupation } from '../api/lookups';
+import type { NamedLookup } from '../types/lookup';
 import { ApiError } from '../api/client';
 
 interface MemberFormProps {
@@ -42,13 +45,6 @@ interface FormState {
   village_id: number | '';
   cell_id: number | '';
   department: DepartmentEntry[];
-  // Placeholders: free-text fallbacks for when the lookup lists don't have
-  // what the user needs. talent/occupation/spiritual_gift only accept ids that
-  // already exist in their lookup tables (`exists:talent,id` etc.), so there's
-  // no backend field to send a custom value to yet. Kept local-only for now.
-  talentOther: string;
-  spiritualGiftOther: string;
-  occupationOther: string;
 }
 
 // Backend only enforces `string` + `max:20` on mobile_tel (Store/UpdateMemberRequest) —
@@ -111,9 +107,6 @@ function initialFormState(member?: Member): FormState {
     cellule_id: member?.cellule_id ?? '',
     village_id: member?.village_id ?? '',
     cell_id: member?.cell_id ?? '',
-    talentOther: '',
-    spiritualGiftOther: '',
-    occupationOther: '',
   };
 }
 
@@ -224,6 +217,16 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [agreed, setAgreed] = useState(false);
+
+  // Lookup values the user created this session via the "not on the list?" inputs.
+  // Merged into the fetched options so a freshly added item shows up (checked).
+  const [extraTalents, setExtraTalents] = useState<NamedLookup[]>([]);
+  const [extraGifts, setExtraGifts] = useState<NamedLookup[]>([]);
+  const [extraOccupations, setExtraOccupations] = useState<NamedLookup[]>([]);
+
+  const talentOptions = [...lookups.talents, ...extraTalents];
+  const giftOptions = [...lookups.spiritualGifts, ...extraGifts];
+  const occupationOptions = [...lookups.occupations, ...extraOccupations];
 
   const geo = useGeographyCascade(form.province_id, form.district_id, form.sector_id, form.cellule_id);
 
@@ -399,47 +402,62 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               required
               searchable
               loading={lookups.loading}
-              options={lookups.talents}
+              options={talentOptions}
               selected={form.talent}
               onChange={(ids) => set('talent', ids)}
-              placeholder={`Search ${lookups.talents.length} talents…`}
+              placeholder={`Search ${talentOptions.length} talents…`}
               emptyText="No talents defined yet."
             />
-            <div className="field field-col-12">
-              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
-              <Inp value={form.talentOther} onChange={(v) => set('talentOther', v)} placeholder="Type a talent that isn't listed above" />
-            </div>
+            <AddOtherField
+              label="Not on the list?"
+              placeholder="Add a talent that isn't listed above"
+              onCreate={createTalent}
+              onAdded={(created) => {
+                setExtraTalents((prev) => [...prev, created]);
+                set('talent', [...form.talent, created.id]);
+              }}
+            />
 
             <MultiSelectChecklist
               label="Spiritual Gifts"
               required
               searchable
               loading={lookups.loading}
-              options={lookups.spiritualGifts}
+              options={giftOptions}
               selected={form.spiritual_gift}
               onChange={(ids) => set('spiritual_gift', ids)}
-              placeholder={`Search ${lookups.spiritualGifts.length} spiritual gifts…`}
+              placeholder={`Search ${giftOptions.length} spiritual gifts…`}
               emptyText="No spiritual gifts defined yet."
             />
-            <div className="field field-col-12">
-              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
-              <Inp value={form.spiritualGiftOther} onChange={(v) => set('spiritualGiftOther', v)} placeholder="Type a spiritual gift that isn't listed above" />
-            </div>
+            <AddOtherField
+              label="Not on the list?"
+              placeholder="Add a spiritual gift that isn't listed above"
+              onCreate={createSpiritualGift}
+              onAdded={(created) => {
+                setExtraGifts((prev) => [...prev, created]);
+                set('spiritual_gift', [...form.spiritual_gift, created.id]);
+              }}
+            />
 
             <MultiSelectChecklist
               label="Occupations"
               searchable
               loading={lookups.loading}
-              options={lookups.occupations}
+              options={occupationOptions}
               selected={form.occupation}
               onChange={(ids) => set('occupation', ids)}
-              placeholder={`Search ${lookups.occupations.length} occupations…`}
+              placeholder={`Search ${occupationOptions.length} occupations…`}
               emptyText="No occupations defined yet."
             />
-            <div className="field field-col-12">
-              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
-              <Inp value={form.occupationOther} onChange={(v) => set('occupationOther', v)} placeholder="Type an occupation that isn't listed above" />
-            </div>
+            <AddOtherField
+              label="Not on the list?"
+              placeholder="Add an occupation that isn't listed above"
+              onCreate={createOccupation}
+              onAdded={(created) => {
+                setExtraOccupations((prev) => [...prev, created]);
+                set('occupation', [...form.occupation, created.id]);
+              }}
+            />
             <div className="field field-col-12" style={{ marginTop: 8 }}>
               <SectionTitle>Education</SectionTitle>
               <EducationEntries

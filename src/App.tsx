@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { AppHeader, type Route } from './components/Layout';
 import { Welcome } from './components/Welcome';
 import { MemberList } from './components/MemberList';
@@ -42,12 +42,6 @@ export function App() {
   const isAdmin = user?.role === 'admin';
   const selectedMember = selectedId !== null ? getMemberById(selectedId) : undefined;
 
-  const totalDepartments = useMemo(() => {
-    const names = new Set<string>();
-    members.forEach((m) => m.departments.forEach((d) => names.add(d.name)));
-    return names.size;
-  }, [members]);
-
   function openProfile(id: number) {
     setSelectedId(id);
     setRoute('profile');
@@ -77,8 +71,6 @@ export function App() {
             onRegisterNew={() => setRoute('register')}
             onViewFamilies={() => setRoute('families')}
             onManageUsers={() => setRoute('admin')}
-            totalMembers={0}
-            totalDepartments={0}
             isAuthenticated={false}
             user={null}
             onLogin={login}
@@ -94,7 +86,7 @@ export function App() {
     <>
       <div className="app-bg" />
       <div className="app-shell">
-        {user?.must_change_password && <TempPasswordBanner email={user.email} />}
+        {user?.must_change_password && <TempPasswordBanner />}
         {route === 'welcome' ? (
           <>
             <AppHeader
@@ -109,8 +101,6 @@ export function App() {
               onRegisterNew={() => setRoute('register')}
               onViewFamilies={() => setRoute('families')}
               onManageUsers={() => setRoute('admin')}
-              totalMembers={members.length}
-              totalDepartments={totalDepartments}
               isAuthenticated={true}
               user={user}
               onLogin={login}

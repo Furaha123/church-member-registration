@@ -764,11 +764,73 @@ html, body {
 .state-banner.error { background: var(--danger-bg); border: 1px solid #f5c6c0; color: var(--danger); }
 .state-banner.info { background: var(--accent-light); border: 1px solid #cfe0fa; color: var(--accent-dark); }
 
+/* Tablet and below */
 @media (max-width: 960px) {
-  .welcome { grid-template-columns: 1fr; }
-  .app-header-inner { grid-template-columns: 1fr; gap: 12px; text-align: center; }
+  .welcome { grid-template-columns: 1fr; gap: 36px; padding: 32px 24px; }
+  .welcome-hero { padding-right: 0; }
+  .app-header-inner { grid-template-columns: 1fr; gap: 12px; text-align: center; padding: 16px 20px; }
+  .brand { justify-content: center; }
+  .nav-tabs { margin-left: 0; justify-content: center; }
   .app-clock { align-items: center; }
   .field-col-3, .field-col-4, .field-col-5, .field-col-6, .field-col-8 { grid-column: span 12; }
   .directory-stats { grid-template-columns: repeat(2, 1fr); }
   .welcome h1 { font-size: 32px; }
+  .page { padding: 32px 24px 64px; }
+  .card { padding: 28px 24px; }
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────
+   A soft, low-contrast dark theme (muted slate, off-white text) rather than
+   pure black on white — easier on the eyes for people who dislike bright
+   screens. Only the base tokens are overridden; everything else derives from
+   them (including the legacy --cream/--gold/--line aliases). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1b1f27;
+  --surface: #242a33;
+  --border: #333a45;
+  --border-strong: #454e5c;
+  --text: #e5e8ee;
+  --text-dim: #b4bcc8;
+  --text-faint: #8b93a1;
+
+  --accent: #5c93f7;
+  --accent-dark: #82aefa;
+  --accent-light: #21304c;
+
+  --success: #56c98a;
+  --success-bg: #17291f;
+  --danger: #f0a6a2;
+  --danger-bg: #33211f;
+}
+
+/* A few spots use hardcoded light colors; nudge them for dark. */
+:root[data-theme="dark"] .input:hover,
+:root[data-theme="dark"] .select:hover,
+:root[data-theme="dark"] .textarea:hover { border-color: var(--text-faint); }
+:root[data-theme="dark"] .state-banner.error { border-color: #5b2d2b; }
+:root[data-theme="dark"] .state-banner.info { border-color: #2c4067; }
+
+/* Phone */
+@media (max-width: 640px) {
+  .page { padding: 20px 12px 56px; }
+  .card { padding: 20px 16px; border-radius: 10px; }
+  .card-header { flex-direction: column; align-items: stretch; gap: 14px; }
+  .card-title { font-size: 20px; }
+  .form-grid { gap: 16px 14px; }
+  .form-nav { flex-wrap: wrap; }
+  .form-nav .meta { order: 3; flex-basis: 100%; text-align: center; }
+  .welcome { padding: 24px 16px; gap: 28px; }
+  .welcome h1 { font-size: 26px; }
+  .login-panel { padding: 24px 18px; }
+  .directory-toolbar { gap: 12px; }
+  .search { min-width: 100%; flex: 1 1 100%; }
+  .member-table { min-width: 600px; }
+  .member-table thead th, .member-table tbody td { padding: 11px 12px; font-size: 13px; }
+  .stepper { margin-bottom: 24px; }
+  .step-dot { width: 32px; height: 32px; font-size: 12px; }
+  .step-label { font-size: 11px; }
+  .modal { padding: 22px 18px 26px; }
+  .filters-dropdown-wrap > .entry-card { left: 0; right: auto; width: min(560px, calc(100vw - 24px)); }
 }

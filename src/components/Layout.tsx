@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getInitialTheme, saveTheme, type Theme } from '../theme';
 
 export type Route = 'welcome' | 'register' | 'directory' | 'profile' | 'edit' | 'families' | 'admin' | 'family-setup';
 
@@ -30,6 +31,8 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   'chevron-down': <path d="M6 9l6 6 6-6" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
   copy: <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+  moon: <path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z" />,
 };
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -80,6 +83,28 @@ const NAV_ITEMS: { route: Route; label: string; adminOnly?: boolean }[] = [
   { route: 'admin', label: 'Users', adminOnly: true },
 ];
 
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+
+  function toggle() {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark';
+    saveTheme(next);
+    setTheme(next);
+  }
+
+  return (
+    <button
+      type="button"
+      className="btn btn-ghost btn-sm"
+      onClick={toggle}
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+    >
+      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
+    </button>
+  );
+}
+
 export function AppHeader({ setRoute, userEmail, onLogout, currentRoute, isAdmin }: AppHeaderProps) {
   const showNav = Boolean(onLogout);
   return (
@@ -113,14 +138,17 @@ export function AppHeader({ setRoute, userEmail, onLogout, currentRoute, isAdmin
           </div>
         )}
 
-        {onLogout && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, justifySelf: 'end' }}>
-            {userEmail && (
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{nameFromEmail(userEmail)}</span>
-            )}
-            <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sign out</button>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, justifySelf: 'end' }}>
+          <ThemeToggle />
+          {onLogout && (
+            <>
+              {userEmail && (
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{nameFromEmail(userEmail)}</span>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sign out</button>
+            </>
+          )}
+        </div>
 
       </div>
     </header>

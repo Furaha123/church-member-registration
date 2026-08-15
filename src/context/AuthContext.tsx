@@ -20,7 +20,11 @@ interface AuthContextValue {
   loginError: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  changePassword: (password: string, passwordConfirmation: string) => Promise<void>;
+  changePassword: (
+    currentPassword: string,
+    password: string,
+    passwordConfirmation: string,
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -80,10 +84,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const changePassword = useCallback(
-    async (password: string, passwordConfirmation: string): Promise<void> => {
-      const updated = await apiChangePassword({ password, password_confirmation: passwordConfirmation });
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
-      setUser(updated);
+    async (currentPassword: string, password: string, passwordConfirmation: string): Promise<void> => {
+      await apiChangePassword({
+        current_password: currentPassword,
+        password,
+        password_confirmation: passwordConfirmation,
+      });
+      // The endpoint returns only a message and keeps the current token, so the
+      // local user is updated in place to clear the temporary-password state.
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated: User = { ...prev, must_change_password: false };
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
     },
     [],
   );

@@ -11,20 +11,22 @@ interface ChangePasswordModalProps {
 
 export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
   const { changePassword } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const passwordsMatch = password === passwordConfirmation;
-  const canSubmit = password.length >= MIN_PASSWORD_LENGTH && passwordsMatch && !submitting;
+  const canSubmit =
+    currentPassword.length > 0 && password.length >= MIN_PASSWORD_LENGTH && passwordsMatch && !submitting;
 
   async function handleSubmit(): Promise<void> {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      await changePassword(password, passwordConfirmation);
+      await changePassword(currentPassword, password, passwordConfirmation);
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not update your password. Please try again.');
@@ -47,10 +49,20 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
         </div>
 
         <p style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Replace your temporary password with one only you know.
+          Enter your current (temporary) password, then choose a new one only you know.
         </p>
 
         <div className="form-grid">
+          <div className="field field-col-12">
+            <label className="label">Current password</label>
+            <input
+              className="input"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
           <div className="field field-col-12">
             <label className="label">New password</label>
             <input

@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App';
 import { AuthProvider } from './context/AuthContext';
+import { applyThemeAttribute, getInitialTheme } from './theme';
+
+// Set the theme attribute before first paint to avoid a flash of the wrong theme.
+applyThemeAttribute(getInitialTheme());
 
 const rootElement = document.getElementById('root');
 

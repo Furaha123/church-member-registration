@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Logo, Icon } from './Layout';
+import { Logo, Icon, ThemeToggle } from './Layout';
 import { resetPassword } from '../api/auth';
 import { ApiError } from '../api/client';
 
@@ -60,6 +60,9 @@ export function ResetPassword() {
     <>
       <div className="app-bg" />
       <div className="app-shell">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 20px' }}>
+          <ThemeToggle />
+        </div>
         <div className="welcome" style={{ justifyContent: 'center' }}>
           <div className="login-panel">
             <div className="seal"><Logo size={64} /></div>
