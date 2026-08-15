@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getUsers, createUser, updateUser, deleteUser, updateUserRole } from '../api/admin';
+import { notifySuccess, notifyError } from '../notify';
 import type {
   AdminUser,
   CreateUserPayload,
@@ -42,26 +43,50 @@ export function useAdminUsers(enabled: boolean = true): UseAdminUsersReturn {
   }, [enabled, refresh]);
 
   const addUser = useCallback(async (data: CreateUserPayload): Promise<CreateUserResult> => {
-    const result = await createUser(data);
-    setUsers((prev) => [result.user, ...prev]);
-    return result;
+    try {
+      const result = await createUser(data);
+      setUsers((prev) => [result.user, ...prev]);
+      notifySuccess('User created.');
+      return result;
+    } catch (err) {
+      notifyError(err, 'Failed to create user.');
+      throw err;
+    }
   }, []);
 
   const editUser = useCallback(async (id: number, data: UpdateUserPayload): Promise<AdminUser> => {
-    const updated = await updateUser(id, data);
-    setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
-    return updated;
+    try {
+      const updated = await updateUser(id, data);
+      setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
+      notifySuccess('User updated.');
+      return updated;
+    } catch (err) {
+      notifyError(err, 'Failed to update user.');
+      throw err;
+    }
   }, []);
 
   const removeUser = useCallback(async (id: number): Promise<void> => {
-    await deleteUser(id);
-    setUsers((prev) => prev.filter((u) => u.id !== id));
+    try {
+      await deleteUser(id);
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      notifySuccess('User deleted.');
+    } catch (err) {
+      notifyError(err, 'Failed to delete user.');
+      throw err;
+    }
   }, []);
 
   const changeRole = useCallback(async (id: number, role: UserRole): Promise<AdminUser> => {
-    const updated = await updateUserRole(id, { role });
-    setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
-    return updated;
+    try {
+      const updated = await updateUserRole(id, { role });
+      setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
+      notifySuccess('Role updated.');
+      return updated;
+    } catch (err) {
+      notifyError(err, 'Failed to update role.');
+      throw err;
+    }
   }, []);
 
   return { users, loading, error, refresh, addUser, editUser, removeUser, changeRole };

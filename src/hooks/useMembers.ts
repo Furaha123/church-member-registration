@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getMembers, createMember, updateMember } from '../api/members';
+import { notifySuccess, notifyError } from '../notify';
 import type { Member, MemberPayload, MemberFilters } from '../types/member';
 
 interface UseMembersReturn {
@@ -47,15 +48,27 @@ export function useMembers(
   }, [enabled, refresh]);
 
   const addMember = useCallback(async (data: MemberPayload): Promise<Member> => {
-    const created = await createMember(data);
-    setMembers((prev) => [created, ...prev]);
-    return created;
+    try {
+      const created = await createMember(data);
+      setMembers((prev) => [created, ...prev]);
+      notifySuccess('Member registered.');
+      return created;
+    } catch (err) {
+      notifyError(err, 'Failed to register member.');
+      throw err;
+    }
   }, []);
 
   const editMember = useCallback(async (id: number, data: MemberPayload): Promise<Member> => {
-    const updated = await updateMember(id, data);
-    setMembers((prev) => prev.map((m) => (m.id === id ? updated : m)));
-    return updated;
+    try {
+      const updated = await updateMember(id, data);
+      setMembers((prev) => prev.map((m) => (m.id === id ? updated : m)));
+      notifySuccess('Member updated.');
+      return updated;
+    } catch (err) {
+      notifyError(err, 'Failed to update member.');
+      throw err;
+    }
   }, []);
 
   const getMemberById = useCallback(

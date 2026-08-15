@@ -24,13 +24,20 @@ export function Families({ members }: FamiliesProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [deleting, setDeleting] = useState(false);
+  const deletingFamily =
+    pendingDeleteId !== null ? families.find((f) => f.id === pendingDeleteId) ?? null : null;
+
   async function confirmDelete(id: number): Promise<void> {
     setDeleteError(null);
+    setDeleting(true);
     try {
       await removeFamily(id);
       setPendingDeleteId(null);
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete family.');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -74,7 +81,6 @@ export function Families({ members }: FamiliesProps) {
       </div>
 
       {error && <div className="state-banner error">Couldn't load families: {error}</div>}
-      {deleteError && <div className="state-banner error">{deleteError}</div>}
 
       {loading ? (
         <div className="checklist-empty">Loading families…</div>
@@ -103,37 +109,26 @@ export function Families({ members }: FamiliesProps) {
                     <span style={{ fontSize: 13, color: 'var(--cream-dim)' }}>{membersSummary(family)}</span>
                   </td>
                   <td>
-                    {pendingDeleteId === family.id ? (
-                      <div className="row-actions">
-                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setPendingDeleteId(null)}>
-                          Cancel
-                        </button>
-                        <button type="button" className="btn btn-primary btn-sm" onClick={() => confirmDelete(family.id)}>
-                          Confirm delete
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="icon-btn accent"
-                          onClick={() => setView({ mode: 'edit', family })}
-                          aria-label={`Edit ${family.family_name}`}
-                          title="Edit family"
-                        >
-                          <Icon name="edit" size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => setPendingDeleteId(family.id)}
-                          aria-label={`Delete ${family.family_name}`}
-                          title="Delete family"
-                        >
-                          <Icon name="trash" size={14} />
-                        </button>
-                      </div>
-                    )}
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="icon-btn accent"
+                        onClick={() => setView({ mode: 'edit', family })}
+                        aria-label={`Edit ${family.family_name}`}
+                        title="Edit family"
+                      >
+                        <Icon name="edit" size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => { setDeleteError(null); setPendingDeleteId(family.id); }}
+                        aria-label={`Delete ${family.family_name}`}
+                        title="Delete family"
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -146,6 +141,36 @@ export function Families({ members }: FamiliesProps) {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {deletingFamily && (
+        <div className="modal-overlay" onClick={() => setPendingDeleteId(null)}>
+          <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="eyebrow">Families</div>
+                <h2 className="card-title">Delete Family</h2>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setPendingDeleteId(null)} aria-label="Close">
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              Are you sure you want to delete <strong>{deletingFamily.family_name}</strong>? This removes the family
+              grouping (the member records themselves are not deleted). This action cannot be undone.
+            </p>
+            {deleteError && <div className="state-banner error" style={{ marginTop: 12 }}>{deleteError}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setPendingDeleteId(null)} disabled={deleting}>
+                Cancel
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(deletingFamily.id)} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

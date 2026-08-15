@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { login as apiLogin, logout as apiLogout, changePassword as apiChangePassword } from '../api/auth';
 import { ApiError, getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
+import { notifySuccess } from '../notify';
 import type { User } from '../types/user';
 
 const USER_STORAGE_KEY = 'church_member_auth_user';
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
         return updated;
       });
+      notifySuccess('Password updated.');
     },
     [],
   );
