@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Logo, Icon } from './Layout';
-import { CELL_OPTIONS } from '../data/constants';
 import { forgotPassword } from '../api/auth';
 import { ApiError } from '../api/client';
 import type { User } from '../types/user';
@@ -8,8 +7,8 @@ import type { User } from '../types/user';
 interface WelcomeProps {
   onEnter: () => void;
   onRegisterNew: () => void;
-  totalMembers: number;
-  totalDepartments: number;
+  onViewFamilies: () => void;
+  onManageUsers: () => void;
   isAuthenticated: boolean;
   user: User | null;
   onLogin: (email: string, password: string) => Promise<void>;
@@ -20,8 +19,8 @@ interface WelcomeProps {
 export function Welcome({
   onEnter,
   onRegisterNew,
-  totalMembers,
-  totalDepartments,
+  onViewFamilies,
+  onManageUsers,
   isAuthenticated,
   user,
   onLogin,
@@ -77,20 +76,6 @@ export function Welcome({
           <div className="verse">"Rejoice that your names are written in heaven."</div>
           <div className="ref">— Luke 10:20</div>
         </div>
-        <div className="welcome-stats">
-          <div className="stat">
-            <div className="num">{totalMembers}</div>
-            <div className="lbl">Members Registered</div>
-          </div>
-          <div className="stat">
-            <div className="num">{totalDepartments}</div>
-            <div className="lbl">Departments</div>
-          </div>
-          <div className="stat">
-            <div className="num">{CELL_OPTIONS.length}</div>
-            <div className="lbl">Church Cells</div>
-          </div>
-        </div>
       </div>
 
       <div className="login-panel">
@@ -118,6 +103,26 @@ export function Welcome({
               View All Members
               <Icon name="arrow" size={14} />
             </button>
+
+            <button
+              className="btn btn-outline"
+              style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
+              onClick={onViewFamilies}
+            >
+              Manage Families
+              <Icon name="arrow" size={14} />
+            </button>
+
+            {user.role === 'admin' && (
+              <button
+                className="btn btn-outline"
+                style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
+                onClick={onManageUsers}
+              >
+                User Management
+                <Icon name="lock" size={14} />
+              </button>
+            )}
           </>
         ) : (
           <>

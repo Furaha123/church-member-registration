@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getMembers, createMember, updateMember } from '../api/members';
-import type { Member, MemberPayload } from '../types/member';
+import { notifySuccess, notifyError } from '../notify';
+import type { Member, MemberPayload, MemberFilters } from '../types/member';
 
 interface UseMembersReturn {
   members: Member[];
@@ -12,23 +13,32 @@ interface UseMembersReturn {
   getMemberById: (id: number) => Member | undefined;
 }
 
-export function useMembers(enabled: boolean = true): UseMembersReturn {
+const NO_FILTERS: MemberFilters = {};
+
+export function useMembers(
+  enabled: boolean = true,
+  filters: MemberFilters = NO_FILTERS,
+): UseMembersReturn {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Serialised so the effect re-runs only when the filter values actually
+  // change, not on every parent render that passes a fresh object literal.
+  const filtersKey = JSON.stringify(filters);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getMembers();
+      const data = await getMembers(JSON.parse(filtersKey) as MemberFilters);
       setMembers(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load members.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filtersKey]);
 
   useEffect(() => {
     // Every member endpoint sits behind auth:sanctum, so don't fire until
@@ -38,15 +48,27 @@ export function useMembers(enabled: boolean = true): UseMembersReturn {
   }, [enabled, refresh]);
 
   const addMember = useCallback(async (data: MemberPayload): Promise<Member> => {
-    const created = await createMember(data);
-    setMembers((prev) => [created, ...prev]);
-    return created;
+    try {
+      const created = await createMember(data);
+      setMembers((prev) => [created, ...prev]);
+      notifySuccess('Member registered.');
+      return created;
+    } catch (err) {
+      notifyError(err, 'Failed to register member.');
+      throw err;
+    }
   }, []);
 
   const editMember = useCallback(async (id: number, data: MemberPayload): Promise<Member> => {
-    const updated = await updateMember(id, data);
-    setMembers((prev) => prev.map((m) => (m.id === id ? updated : m)));
-    return updated;
+    try {
+      const updated = await updateMember(id, data);
+      setMembers((prev) => prev.map((m) => (m.id === id ? updated : m)));
+      notifySuccess('Member updated.');
+      return updated;
+    } catch (err) {
+      notifyError(err, 'Failed to update member.');
+      throw err;
+    }
   }, []);
 
   const getMemberById = useCallback(

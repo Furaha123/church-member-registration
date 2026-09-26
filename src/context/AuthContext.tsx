@@ -7,8 +7,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { login as apiLogin, logout as apiLogout } from '../api/auth';
+import { login as apiLogin, logout as apiLogout, changePassword as apiChangePassword } from '../api/auth';
 import { ApiError, getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
+import { notifySuccess } from '../notify';
 import type { User } from '../types/user';
 
 const USER_STORAGE_KEY = 'church_member_auth_user';
@@ -20,6 +21,11 @@ interface AuthContextValue {
   loginError: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (
+    currentPassword: string,
+    password: string,
+    passwordConfirmation: string,
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -78,9 +84,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clearSession]);
 
+  const changePassword = useCallback(
+    async (currentPassword: string, password: string, passwordConfirmation: string): Promise<void> => {
+      await apiChangePassword({
+        current_password: currentPassword,
+        password,
+        password_confirmation: passwordConfirmation,
+      });
+      // The endpoint returns only a message and keeps the current token, so the
+      // local user is updated in place to clear the temporary-password state.
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated: User = { ...prev, must_change_password: false };
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+      notifySuccess('Password updated.');
+    },
+    [],
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: user !== null, loggingIn, loginError, login, logout }),
-    [user, loggingIn, loginError, login, logout],
+    () => ({ user, isAuthenticated: user !== null, loggingIn, loginError, login, logout, changePassword }),
+    [user, loggingIn, loginError, login, logout, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

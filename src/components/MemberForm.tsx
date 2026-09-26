@@ -5,9 +5,11 @@ import { useLookups } from '../hooks/useLookups';
 import { useGeographyCascade } from '../hooks/useGeographyCascade';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
 import { MultiSelectChecklist } from './form/MultiSelectChecklist';
+import { AddOtherField } from './form/AddOtherField';
 import { EducationEntries } from './form/EducationEntries';
 import { DepartmentEntries } from './form/DepartmentEntries';
-import { FamilyMemberEntries, type FamilyMemberEntry } from './form/FamilyMemberEntries';
+import { createTalent, createSpiritualGift, createOccupation } from '../api/lookups';
+import type { NamedLookup } from '../types/lookup';
 import { ApiError } from '../api/client';
 
 interface MemberFormProps {
@@ -22,6 +24,11 @@ interface FormState {
   last_name: string;
   sex_id: number | '';
   marital_status_id: number | '';
+  date_birthday: string;
+  national_id: string;
+  date_salvation: string;
+  date_baptism: string;
+  member_since: string;
   fathers_name: string;
   mothers_name: string;
   talent: number[];
@@ -38,21 +45,19 @@ interface FormState {
   village_id: number | '';
   cell_id: number | '';
   department: DepartmentEntry[];
-  // Placeholder only — see FamilyMemberEntries.tsx. Never sent to the API.
-  family_members: FamilyMemberEntry[];
-  // Placeholders too: free-text fallbacks for when the lookup lists don't have
-  // what the user needs. talent/occupation/spiritual_gift only accept ids that
-  // already exist in their lookup tables (`exists:talent,id` etc.), so there's
-  // no backend field to send a custom value to yet. Kept local-only for now.
-  talentOther: string;
-  spiritualGiftOther: string;
-  occupationOther: string;
 }
 
 // Backend only enforces `string` + `max:20` on mobile_tel (Store/UpdateMemberRequest) —
 // no format rule — so this is a frontend-only guard against typing plain text
 // (e.g. lorem-ipsum placeholder data) into a phone number field.
 const PHONE_PATTERN = /^[0-9+\-\s()]+$/;
+
+// Basic client-side email shape check so an invalid address is caught before the
+// server round-trip. The backend's `email` rule remains the source of truth.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Key dates can never be in the future, so date inputs are capped at today.
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
 
 const STEPS = [
   { id: 1, label: 'Personal' },
@@ -67,6 +72,11 @@ function initialFormState(member?: Member): FormState {
     last_name: member?.last_name ?? '',
     sex_id: member?.sex_id ?? '',
     marital_status_id: member?.marital_status_id ?? '',
+    date_birthday: member?.date_birthday ?? '',
+    national_id: member?.national_id ?? '',
+    date_salvation: member?.date_salvation ?? '',
+    date_baptism: member?.date_baptism ?? '',
+    member_since: member?.member_since ?? '',
     fathers_name: member?.fathers_name ?? '',
     mothers_name: member?.mothers_name ?? '',
     // These three are plain many-to-many with no pivot data, so they round-trip
@@ -97,12 +107,6 @@ function initialFormState(member?: Member): FormState {
     cellule_id: member?.cellule_id ?? '',
     village_id: member?.village_id ?? '',
     cell_id: member?.cell_id ?? '',
-    // Always starts empty: the backend has nowhere to persist this yet, so
-    // there's nothing to load back in even when editing an existing member.
-    family_members: [],
-    talentOther: '',
-    spiritualGiftOther: '',
-    occupationOther: '',
   };
 }
 
@@ -114,8 +118,13 @@ function toPayload(form: FormState): MemberPayload {
     marital_status_id: Number(form.marital_status_id),
     talent: form.talent,
     spiritual_gift: form.spiritual_gift,
+    date_birthday: form.date_birthday,
   };
 
+  if (form.national_id.trim()) payload.national_id = form.national_id.trim();
+  if (form.date_salvation) payload.date_salvation = form.date_salvation;
+  if (form.date_baptism) payload.date_baptism = form.date_baptism;
+  if (form.member_since) payload.member_since = form.member_since;
   if (form.fathers_name.trim()) payload.fathers_name = form.fathers_name.trim();
   if (form.mothers_name.trim()) payload.mothers_name = form.mothers_name.trim();
   if (form.employed) payload.employed = form.employed === 'yes';
@@ -173,15 +182,24 @@ function Inp({ value, onChange, type = 'text', placeholder }: {
   );
 }
 
-function Stepper({ current, setStep }: { current: number; setStep: (n: number) => void }) {
+function Stepper({
+  current,
+  setStep,
+  isComplete,
+}: {
+  current: number;
+  setStep: (n: number) => void;
+  isComplete: (id: number) => boolean;
+}) {
   return (
     <div className="stepper">
       {STEPS.map((s) => {
-        const cls = s.id === current ? 'active' : s.id < current ? 'done' : '';
+        const done = isComplete(s.id) && s.id !== current;
+        const cls = s.id === current ? 'active' : done ? 'done' : '';
         return (
           <div key={s.id} className={'step ' + cls} onClick={() => setStep(s.id)}>
             <div className="step-dot">
-              {s.id < current ? <Icon name="check" size={18} /> : String(s.id).padStart(2, '0')}
+              {done ? <Icon name="check" size={18} /> : String(s.id).padStart(2, '0')}
             </div>
             <div className="step-label">{s.label}</div>
           </div>
@@ -198,6 +216,17 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [agreed, setAgreed] = useState(false);
+
+  // Lookup values the user created this session via the "not on the list?" inputs.
+  // Merged into the fetched options so a freshly added item shows up (checked).
+  const [extraTalents, setExtraTalents] = useState<NamedLookup[]>([]);
+  const [extraGifts, setExtraGifts] = useState<NamedLookup[]>([]);
+  const [extraOccupations, setExtraOccupations] = useState<NamedLookup[]>([]);
+
+  const talentOptions = [...lookups.talents, ...extraTalents];
+  const giftOptions = [...lookups.spiritualGifts, ...extraGifts];
+  const occupationOptions = [...lookups.occupations, ...extraOccupations];
 
   const geo = useGeographyCascade(form.province_id, form.district_id, form.sector_id, form.cellule_id);
 
@@ -206,16 +235,35 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   }
 
   const isEditing = Boolean(member);
-  const isMarried = MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name === 'MARRIED';
   const mobileValid = form.mobile_tel.trim() === '' || PHONE_PATTERN.test(form.mobile_tel.trim());
-  const canSubmit =
+  const emailValid = form.email.trim() === '' || EMAIL_PATTERN.test(form.email.trim());
+  const dobValid = form.date_birthday === '' || form.date_birthday <= TODAY_ISO;
+  const requiredFilled =
     form.first_name.trim().length > 0 &&
     form.last_name.trim().length > 0 &&
     form.sex_id !== '' &&
     form.marital_status_id !== '' &&
+    form.date_birthday !== '' &&
     form.talent.length > 0 &&
-    form.spiritual_gift.length > 0 &&
-    mobileValid;
+    form.spiritual_gift.length > 0;
+  const canSubmit = requiredFilled && mobileValid && emailValid && dobValid && agreed;
+
+  const step1Complete =
+    form.first_name.trim().length > 0 &&
+    form.last_name.trim().length > 0 &&
+    form.sex_id !== '' &&
+    form.marital_status_id !== '' &&
+    form.date_birthday !== '' &&
+    dobValid;
+  const step2Complete = form.talent.length > 0 && form.spiritual_gift.length > 0;
+  const step3Complete = step1Complete && step2Complete && emailValid && mobileValid;
+
+  function isStepComplete(id: number): boolean {
+    if (id === 1) return step1Complete;
+    if (id === 2) return step2Complete;
+    if (id === 3) return step3Complete;
+    return false;
+  }
 
   async function handleSubmit() {
     if (!canSubmit || submitting) return;
@@ -249,7 +297,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
         </div>
       </div>
 
-      <Stepper current={step} setStep={setStep} />
+      <Stepper current={step} setStep={setStep} isComplete={isStepComplete} />
 
       {lookups.error && (
         <div className="state-banner error">Couldn't load form options: {lookups.error}</div>
@@ -296,27 +344,51 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 <option value="no">No</option>
               </select>
             </Field>
+            <Field label="Date of Birth" required span={4}>
+              <input
+                className="input"
+                type="date"
+                max={TODAY_ISO}
+                value={form.date_birthday}
+                onChange={(e) => set('date_birthday', e.target.value)}
+              />
+            </Field>
+            <Field label="National ID" span={8}>
+              <Inp value={form.national_id} onChange={(v) => set('national_id', v)} />
+            </Field>
             <Field label="Father's Name" span={6}>
               <Inp value={form.fathers_name} onChange={(v) => set('fathers_name', v)} />
             </Field>
             <Field label="Mother's Name" span={6}>
               <Inp value={form.mothers_name} onChange={(v) => set('mothers_name', v)} />
             </Field>
-
-            {isMarried && (
-              <div className="field field-col-12" style={{ marginTop: 8 }}>
-                <SectionTitle>Family Members</SectionTitle>
-                <div className="state-banner info">
-                  Placeholder only — the backend has no way to store spouse or children records yet, so this
-                  section won't be saved when you submit. It's here so the design is ready once that support
-                  is added.
-                </div>
-                <FamilyMemberEntries
-                  entries={form.family_members}
-                  onChange={(entries) => set('family_members', entries)}
-                />
-              </div>
-            )}
+            <Field label="Date of Salvation" span={4}>
+              <input
+                className="input"
+                type="date"
+                max={TODAY_ISO}
+                value={form.date_salvation}
+                onChange={(e) => set('date_salvation', e.target.value)}
+              />
+            </Field>
+            <Field label="Date of Baptism" span={4}>
+              <input
+                className="input"
+                type="date"
+                max={TODAY_ISO}
+                value={form.date_baptism}
+                onChange={(e) => set('date_baptism', e.target.value)}
+              />
+            </Field>
+            <Field label="Member Since" span={4}>
+              <input
+                className="input"
+                type="date"
+                max={TODAY_ISO}
+                value={form.member_since}
+                onChange={(e) => set('member_since', e.target.value)}
+              />
+            </Field>
           </div>
         </>
       )}
@@ -330,47 +402,62 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               required
               searchable
               loading={lookups.loading}
-              options={lookups.talents}
+              options={talentOptions}
               selected={form.talent}
               onChange={(ids) => set('talent', ids)}
-              placeholder={`Search ${lookups.talents.length} talents…`}
+              placeholder={`Search ${talentOptions.length} talents…`}
               emptyText="No talents defined yet."
             />
-            <div className="field field-col-12">
-              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
-              <Inp value={form.talentOther} onChange={(v) => set('talentOther', v)} placeholder="Type a talent that isn't listed above" />
-            </div>
+            <AddOtherField
+              label="Not on the list?"
+              placeholder="Add a talent that isn't listed above"
+              onCreate={createTalent}
+              onAdded={(created) => {
+                setExtraTalents((prev) => [...prev, created]);
+                set('talent', [...form.talent, created.id]);
+              }}
+            />
 
             <MultiSelectChecklist
               label="Spiritual Gifts"
               required
               searchable
               loading={lookups.loading}
-              options={lookups.spiritualGifts}
+              options={giftOptions}
               selected={form.spiritual_gift}
               onChange={(ids) => set('spiritual_gift', ids)}
-              placeholder={`Search ${lookups.spiritualGifts.length} spiritual gifts…`}
+              placeholder={`Search ${giftOptions.length} spiritual gifts…`}
               emptyText="No spiritual gifts defined yet."
             />
-            <div className="field field-col-12">
-              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
-              <Inp value={form.spiritualGiftOther} onChange={(v) => set('spiritualGiftOther', v)} placeholder="Type a spiritual gift that isn't listed above" />
-            </div>
+            <AddOtherField
+              label="Not on the list?"
+              placeholder="Add a spiritual gift that isn't listed above"
+              onCreate={createSpiritualGift}
+              onAdded={(created) => {
+                setExtraGifts((prev) => [...prev, created]);
+                set('spiritual_gift', [...form.spiritual_gift, created.id]);
+              }}
+            />
 
             <MultiSelectChecklist
               label="Occupations"
               searchable
               loading={lookups.loading}
-              options={lookups.occupations}
+              options={occupationOptions}
               selected={form.occupation}
               onChange={(ids) => set('occupation', ids)}
-              placeholder={`Search ${lookups.occupations.length} occupations…`}
+              placeholder={`Search ${occupationOptions.length} occupations…`}
               emptyText="No occupations defined yet."
             />
-            <div className="field field-col-12">
-              <label className="label">Not on the list? <span className="hint">not saved yet — pending backend support</span></label>
-              <Inp value={form.occupationOther} onChange={(v) => set('occupationOther', v)} placeholder="Type an occupation that isn't listed above" />
-            </div>
+            <AddOtherField
+              label="Not on the list?"
+              placeholder="Add an occupation that isn't listed above"
+              onCreate={createOccupation}
+              onAdded={(created) => {
+                setExtraOccupations((prev) => [...prev, created]);
+                set('occupation', [...form.occupation, created.id]);
+              }}
+            />
             <div className="field field-col-12" style={{ marginTop: 8 }}>
               <SectionTitle>Education</SectionTitle>
               <EducationEntries
@@ -512,7 +599,6 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                   ['Occupations', String(form.occupation.length)],
                   ['Education', String(form.education.length)],
                   ['Departments', String(form.department.length)],
-                  ...(isMarried ? [['Family Members (not saved)', String(form.family_members.length)]] : []),
                 ].map(([k, v]) => (
                   <div key={k}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--cream-faint)' }}>{k}</div>
@@ -525,9 +611,18 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
             {!canSubmit && (
               <div className="field field-col-12">
                 <div className="state-banner info">
-                  First name, last name, sex, marital status, at least one talent, and at least one spiritual gift
-                  are required before this can be submitted.
-                  {!mobileValid && ' The mobile number also has letters in it — numbers only.'}
+                  {!requiredFilled && (
+                    <div>
+                      First name, last name, sex, marital status, date of birth, at least one talent, and at least
+                      one spiritual gift are required before this can be submitted.
+                    </div>
+                  )}
+                  {!dobValid && <div>Date of birth can't be in the future — please pick a valid date.</div>}
+                  {!emailValid && <div>The email address isn't valid (check it on the Contact step).</div>}
+                  {!mobileValid && <div>The mobile number has invalid characters — numbers only (Contact step).</div>}
+                  {requiredFilled && dobValid && emailValid && mobileValid && !agreed && (
+                    <div>Please tick the confirmation box below to submit.</div>
+                  )}
                 </div>
               </div>
             )}
@@ -535,13 +630,14 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
             {submitError && (
               <div className="field field-col-12">
                 <div className="state-banner error">
-                  {submitError}
-                  {Object.keys(fieldErrors).length > 0 && (
-                    <ul style={{ marginTop: 8, paddingLeft: 18 }}>
+                  {Object.keys(fieldErrors).length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
                       {Object.entries(fieldErrors).map(([field, messages]) => (
                         <li key={field}>{messages.join(' ')}</li>
                       ))}
                     </ul>
+                  ) : (
+                    submitError
                   )}
                 </div>
               </div>
@@ -549,7 +645,12 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
 
             <div className="field field-col-12">
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, color: 'var(--cream-dim)', fontSize: 13, lineHeight: 1.7, padding: '14px 0', cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ accentColor: 'var(--gold-500)', marginTop: 4 }} />
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  style={{ accentColor: 'var(--gold-500)', marginTop: 4 }}
+                />
                 <span>I confirm this information is correct and agree to it being stored in the church member database.</span>
               </label>
             </div>
