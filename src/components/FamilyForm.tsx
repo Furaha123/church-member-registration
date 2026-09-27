@@ -55,6 +55,20 @@ function memberLabel(member: Member): string {
   return `${member.first_name} ${member.last_name} (#${member.id})`;
 }
 
+// None of these dates can be in the future (blocks things like a 2027 date),
+// and a member's end date in the family can't be before their start date.
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
+
+function isNotFuture(date: string | undefined): boolean {
+  return !date || date <= TODAY_ISO;
+}
+
+function isRowValid(row: FamilyMemberInput): boolean {
+  if (!isNotFuture(row.start_date) || !isNotFuture(row.end_date)) return false;
+  if (row.start_date && row.end_date && row.end_date < row.start_date) return false;
+  return true;
+}
+
 export function FamilyForm({ family, members, onSubmit, onSuccess, onCancel, seedName, seedMembers }: FamilyFormProps) {
   const [form, setForm] = useState<FormState>(() => initialState(family, seedName, seedMembers));
   const [submitting, setSubmitting] = useState(false);
@@ -62,7 +76,9 @@ export function FamilyForm({ family, members, onSubmit, onSuccess, onCancel, see
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   const isEditing = Boolean(family);
-  const canSubmit = form.family_name.trim().length > 0 && !submitting;
+  const dateFormedValid = isNotFuture(form.date_formed);
+  const membersValid = form.members.every(isRowValid);
+  const canSubmit = form.family_name.trim().length > 0 && dateFormedValid && membersValid && !submitting;
 
   function updateMember(index: number, patch: Partial<FamilyMemberInput>): void {
     setForm((prev) => ({
@@ -129,9 +145,13 @@ export function FamilyForm({ family, members, onSubmit, onSuccess, onCancel, see
           <input
             className="input"
             type="date"
+            max={TODAY_ISO}
             value={form.date_formed}
             onChange={(e) => setForm((p) => ({ ...p, date_formed: e.target.value }))}
           />
+          {!dateFormedValid && (
+            <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
+          )}
         </div>
         <div className="field field-col-12">
           <label className="label">Address</label>
@@ -189,18 +209,31 @@ export function FamilyForm({ family, members, onSubmit, onSuccess, onCancel, see
                   <input
                     className="input"
                     type="date"
+                    max={TODAY_ISO}
                     value={row.start_date ?? ''}
                     onChange={(e) => updateMember(index, { start_date: e.target.value || undefined })}
                   />
+                  {!isNotFuture(row.start_date) && (
+                    <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
+                  )}
                 </div>
                 <div className="field field-col-6">
                   <label className="label">End Date</label>
                   <input
                     className="input"
                     type="date"
+                    min={row.start_date || undefined}
+                    max={TODAY_ISO}
                     value={row.end_date ?? ''}
                     onChange={(e) => updateMember(index, { end_date: e.target.value || undefined })}
                   />
+                  {!isNotFuture(row.end_date) ? (
+                    <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
+                  ) : (
+                    row.start_date && row.end_date && row.end_date < row.start_date && (
+                      <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be before the start date.</div>
+                    )
+                  )}
                 </div>
               </div>
             </div>

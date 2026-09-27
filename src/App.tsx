@@ -3,7 +3,7 @@ import { AppHeader, type Route } from './components/Layout';
 import { Welcome } from './components/Welcome';
 import { MemberList } from './components/MemberList';
 import { MemberForm } from './components/MemberForm';
-import { MemberProfile } from './components/MemberProfile';
+import { MemberProfile, MemberProfileSkeleton } from './components/MemberProfile';
 import { Families } from './components/Families';
 import { AdminUsers } from './components/AdminUsers';
 import { ResetPassword } from './components/ResetPassword';
@@ -169,6 +169,10 @@ export function App() {
                   onEdit={() => setRoute('edit')}
                   onBack={() => setRoute('directory')}
                 />
+              )}
+
+              {route === 'profile' && !selectedMember && loading && (
+                <MemberProfileSkeleton onBack={() => setRoute('directory')} />
               )}
 
               {route === 'edit' && selectedMember && (

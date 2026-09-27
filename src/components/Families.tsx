@@ -3,13 +3,18 @@ import type { Member } from '../types/member';
 import type { Family } from '../types/family';
 import { useFamilies } from '../hooks/useFamilies';
 import { FamilyForm } from './FamilyForm';
+import { FamilyDetail } from './FamilyDetail';
 import { Icon } from './Layout';
 
 interface FamiliesProps {
   members: Member[];
 }
 
-type View = { mode: 'list' } | { mode: 'create' } | { mode: 'edit'; family: Family };
+type View =
+  | { mode: 'list' }
+  | { mode: 'create' }
+  | { mode: 'view'; family: Family }
+  | { mode: 'edit'; family: Family };
 
 function membersSummary(family: Family): string {
   if (family.members.length === 0) return 'No members yet';
@@ -52,6 +57,19 @@ export function Families({ members }: FamiliesProps) {
     );
   }
 
+  if (view.mode === 'view') {
+    // Re-resolve from the live list so an edit made right before viewing (or in
+    // a previous visit) is reflected, rather than the stale snapshot in `view`.
+    const current = families.find((f) => f.id === view.family.id) ?? view.family;
+    return (
+      <FamilyDetail
+        family={current}
+        onEdit={() => setView({ mode: 'edit', family: current })}
+        onBack={() => setView({ mode: 'list' })}
+      />
+    );
+  }
+
   if (view.mode === 'edit') {
     const target = view.family;
     return (
@@ -59,8 +77,8 @@ export function Families({ members }: FamiliesProps) {
         family={target}
         members={members}
         onSubmit={(data) => editFamily(target.id, data)}
-        onSuccess={() => setView({ mode: 'list' })}
-        onCancel={() => setView({ mode: 'list' })}
+        onSuccess={(saved) => setView({ mode: 'view', family: saved })}
+        onCancel={() => setView({ mode: 'view', family: target })}
       />
     );
   }
@@ -110,6 +128,15 @@ export function Families({ members }: FamiliesProps) {
                   </td>
                   <td>
                     <div className="row-actions">
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => setView({ mode: 'view', family })}
+                        aria-label={`View ${family.family_name}`}
+                        title="View details"
+                      >
+                        <Icon name="eye" size={15} />
+                      </button>
                       <button
                         type="button"
                         className="icon-btn accent"

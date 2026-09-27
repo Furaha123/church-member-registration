@@ -76,12 +76,30 @@ function pairResponsibilities(
 // (e.g. lorem-ipsum placeholder data) into a phone number field.
 const PHONE_PATTERN = /^[0-9+\-\s()]+$/;
 
+// Backend only enforces `string` + `max:20` on national_id — no format rule —
+// so a Rwandan national ID's real shape (exactly 16 digits) is enforced here
+// on the frontend. The input itself also strips non-digit characters as the
+// user types, so this pattern is really just the final length/all-digits check.
+const NATIONAL_ID_PATTERN = /^\d{16}$/;
+
 // Basic client-side email shape check so an invalid address is caught before the
 // server round-trip. The backend's `email` rule remains the source of truth.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Key dates can never be in the future, so date inputs are capped at today.
 const TODAY_ISO = new Date().toISOString().slice(0, 10);
+
+// None of these dates can be after today (blocks things like a 2027 birthday),
+// and salvation/baptism/member-since can't predate the person's own birth —
+// the `max` attribute on the <input> is only a soft hint some browsers ignore
+// on typed/pasted input, so it's re-checked here too.
+function isNotFuture(date: string): boolean {
+  return date === '' || date <= TODAY_ISO;
+}
+
+function isOnOrAfterBirth(date: string, birthDate: string): boolean {
+  return date === '' || birthDate === '' || date >= birthDate;
+}
 
 const STEPS = [
   { id: 1, label: 'Personal' },
@@ -313,7 +331,14 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   const isEditing = Boolean(member);
   const mobileValid = form.mobile_tel.trim() === '' || PHONE_PATTERN.test(form.mobile_tel.trim());
   const emailValid = form.email.trim() === '' || EMAIL_PATTERN.test(form.email.trim());
-  const dobValid = form.date_birthday === '' || form.date_birthday <= TODAY_ISO;
+  const nationalIdValid = form.national_id.trim() === '' || NATIONAL_ID_PATTERN.test(form.national_id.trim());
+  const dobValid = isNotFuture(form.date_birthday);
+  const salvationValid =
+    isNotFuture(form.date_salvation) && isOnOrAfterBirth(form.date_salvation, form.date_birthday);
+  const baptismValid = isNotFuture(form.date_baptism) && isOnOrAfterBirth(form.date_baptism, form.date_birthday);
+  const memberSinceValid =
+    isNotFuture(form.member_since) && isOnOrAfterBirth(form.member_since, form.date_birthday);
+  const datesValid = dobValid && salvationValid && baptismValid && memberSinceValid;
   const requiredFilled =
     form.first_name.trim().length > 0 &&
     form.last_name.trim().length > 0 &&
@@ -322,7 +347,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
     form.date_birthday !== '' &&
     form.talent.length > 0 &&
     form.spiritual_gift.length > 0;
-  const canSubmit = requiredFilled && mobileValid && emailValid && dobValid && agreed;
+  const canSubmit = requiredFilled && mobileValid && emailValid && nationalIdValid && datesValid && agreed;
 
   const step1Complete =
     form.first_name.trim().length > 0 &&
@@ -330,7 +355,8 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
     form.sex_id !== '' &&
     form.marital_status_id !== '' &&
     form.date_birthday !== '' &&
-    dobValid;
+    datesValid &&
+    nationalIdValid;
   const step2Complete = form.talent.length > 0 && form.spiritual_gift.length > 0;
   const step3Complete = step1Complete && step2Complete && emailValid && mobileValid;
 
@@ -428,9 +454,26 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 value={form.date_birthday}
                 onChange={(e) => set('date_birthday', e.target.value)}
               />
+              {!dobValid && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
+              )}
             </Field>
-            <Field label="National ID" span={8}>
-              <Inp value={form.national_id} onChange={(v) => set('national_id', v)} />
+            <Field label="National ID" span={8} hint="16 digits">
+              <input
+                className="input"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={16}
+                value={form.national_id}
+                onChange={(e) => set('national_id', e.target.value.replace(/\D/g, '').slice(0, 16))}
+                placeholder="1199080012345678"
+              />
+              {!nationalIdValid && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
+                  National ID must be exactly 16 digits ({form.national_id.length}/16 so far).
+                </div>
+              )}
             </Field>
             <Field label="Father's Name" span={6}>
               <Inp value={form.fathers_name} onChange={(v) => set('fathers_name', v)} />
@@ -442,28 +485,46 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               <input
                 className="input"
                 type="date"
+                min={form.date_birthday || undefined}
                 max={TODAY_ISO}
                 value={form.date_salvation}
                 onChange={(e) => set('date_salvation', e.target.value)}
               />
+              {!salvationValid && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
+                  {isNotFuture(form.date_salvation) ? "Can't be before the date of birth." : "Can't be in the future."}
+                </div>
+              )}
             </Field>
             <Field label="Date of Baptism" span={4}>
               <input
                 className="input"
                 type="date"
+                min={form.date_birthday || undefined}
                 max={TODAY_ISO}
                 value={form.date_baptism}
                 onChange={(e) => set('date_baptism', e.target.value)}
               />
+              {!baptismValid && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
+                  {isNotFuture(form.date_baptism) ? "Can't be before the date of birth." : "Can't be in the future."}
+                </div>
+              )}
             </Field>
             <Field label="Member Since" span={4}>
               <input
                 className="input"
                 type="date"
+                min={form.date_birthday || undefined}
                 max={TODAY_ISO}
                 value={form.member_since}
                 onChange={(e) => set('member_since', e.target.value)}
               />
+              {!memberSinceValid && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
+                  {isNotFuture(form.member_since) ? "Can't be before the date of birth." : "Can't be in the future."}
+                </div>
+              )}
             </Field>
 
             <div className="field field-col-12" style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
@@ -721,9 +782,13 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                     </div>
                   )}
                   {!dobValid && <div>Date of birth can't be in the future — please pick a valid date.</div>}
+                  {!salvationValid && <div>Date of salvation must be on/after the date of birth and not in the future (Personal step).</div>}
+                  {!baptismValid && <div>Date of baptism must be on/after the date of birth and not in the future (Personal step).</div>}
+                  {!memberSinceValid && <div>Member since must be on/after the date of birth and not in the future (Personal step).</div>}
+                  {!nationalIdValid && <div>National ID must be exactly 16 digits (Personal step).</div>}
                   {!emailValid && <div>The email address isn't valid (check it on the Contact step).</div>}
                   {!mobileValid && <div>The mobile number has invalid characters — numbers only (Contact step).</div>}
-                  {requiredFilled && dobValid && emailValid && mobileValid && !agreed && (
+                  {requiredFilled && datesValid && nationalIdValid && emailValid && mobileValid && !agreed && (
                     <div>Please tick the confirmation box below to submit.</div>
                   )}
                 </div>
