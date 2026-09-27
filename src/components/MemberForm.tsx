@@ -1,15 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Member, MemberPayload, EducationEntry, DepartmentEntry } from '../types/member';
 import { Icon } from './Layout';
 import { useLookups } from '../hooks/useLookups';
 import { useGeographyCascade } from '../hooks/useGeographyCascade';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
 import { MultiSelectChecklist } from './form/MultiSelectChecklist';
-import { AddOtherField } from './form/AddOtherField';
 import { EducationEntries } from './form/EducationEntries';
 import { DepartmentEntries } from './form/DepartmentEntries';
-import { createTalent, createSpiritualGift, createOccupation } from '../api/lookups';
-import type { NamedLookup } from '../types/lookup';
 import { ApiError } from '../api/client';
 
 interface MemberFormProps {
@@ -45,6 +42,33 @@ interface FormState {
   village_id: number | '';
   cell_id: number | '';
   department: DepartmentEntry[];
+  pictureFile: File | null;
+}
+
+// The live API's FacultyResource/ChurchResponsibilityResource don't expose the
+// pivot's education_id/department_id, so a returned member's flat faculties list
+// can only be confidently re-paired to its education levels when there's just
+// one education entry (no ambiguity). With more than one, or with no data at
+// all, the entry is left empty for the registrar to re-select — see the info
+// banners in steps 2 and 3.
+function pairFaculties(faculties: Member['faculties'], educationId: number, singleEducation: boolean): number[] {
+  const hasPivotData = faculties.some((f) => f.education_id !== null && f.education_id !== undefined);
+  if (hasPivotData) {
+    return faculties.filter((f) => f.education_id === educationId).map((f) => f.id);
+  }
+  return singleEducation ? faculties.map((f) => f.id) : [];
+}
+
+function pairResponsibilities(
+  responsibilities: Member['church_responsibilities'],
+  departmentId: number,
+  singleDepartment: boolean,
+): number[] {
+  const hasPivotData = responsibilities.some((r) => r.department_id !== null && r.department_id !== undefined);
+  if (hasPivotData) {
+    return responsibilities.filter((r) => r.department_id === departmentId).map((r) => r.id);
+  }
+  return singleDepartment ? responsibilities.map((r) => r.id) : [];
 }
 
 // Backend only enforces `string` + `max:20` on mobile_tel (Store/UpdateMemberRequest) —
@@ -84,19 +108,20 @@ function initialFormState(member?: Member): FormState {
     talent: member?.talents.map((t) => t.id) ?? [],
     spiritual_gift: member?.spiritual_gifts.map((g) => g.id) ?? [],
     occupation: member?.occupations.map((o) => o.id) ?? [],
-    // Reconstructed by grouping each member's flat faculties/church_responsibilities
-    // list back onto their paired education/department, using the education_id /
-    // department_id that FacultyResource and ChurchResponsibilityResource now
-    // expose from the pivot (see MemberFaculty / MemberChurchResponsibility).
+    // See pairFaculties/pairResponsibilities above: reliably reconstructed only
+    // when there's a single education/department entry, since this API doesn't
+    // return the pivot ids needed to disambiguate multiple.
     education: member?.educations.map((edu) => ({
       education_id: edu.id,
-      faculty: member.faculties.filter((f) => f.education_id === edu.id).map((f) => f.id),
+      faculty: pairFaculties(member.faculties, edu.id, member.educations.length === 1),
     })) ?? [],
     department: member?.departments.map((dept) => ({
       department_id: dept.id,
-      church_responsibility: member.church_responsibilities
-        .filter((cr) => cr.department_id === dept.id)
-        .map((cr) => cr.id),
+      church_responsibility: pairResponsibilities(
+        member.church_responsibilities,
+        dept.id,
+        member.departments.length === 1,
+      ),
     })) ?? [],
     employed: member?.employed === true ? 'yes' : member?.employed === false ? 'no' : '',
     mobile_tel: member?.mobile_tel ?? '',
@@ -107,7 +132,21 @@ function initialFormState(member?: Member): FormState {
     cellule_id: member?.cellule_id ?? '',
     village_id: member?.village_id ?? '',
     cell_id: member?.cell_id ?? '',
+    pictureFile: null,
   };
+}
+
+// True when this member has more than one education/department entry and this
+// API returned no pivot data to tell their faculties/responsibilities apart —
+// i.e. the pairing above had to fall back to empty rather than guessing.
+function educationPairingUncertain(member?: Member): boolean {
+  if (!member || member.educations.length <= 1) return false;
+  return !member.faculties.some((f) => f.education_id !== null && f.education_id !== undefined);
+}
+
+function departmentPairingUncertain(member?: Member): boolean {
+  if (!member || member.departments.length <= 1) return false;
+  return !member.church_responsibilities.some((cr) => cr.department_id !== null && cr.department_id !== undefined);
 }
 
 function toPayload(form: FormState): MemberPayload {
@@ -139,9 +178,13 @@ function toPayload(form: FormState): MemberPayload {
   if (form.cellule_id) payload.cellule_id = Number(form.cellule_id);
   if (form.village_id) payload.village_id = Number(form.village_id);
   if (form.cell_id) payload.cell_id = Number(form.cell_id);
+  if (form.pictureFile) payload.picture = form.pictureFile;
 
   return payload;
 }
+
+const MAX_PICTURE_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_PICTURE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -218,17 +261,50 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [agreed, setAgreed] = useState(false);
 
-  // Lookup values the user created this session via the "not on the list?" inputs.
-  // Merged into the fetched options so a freshly added item shows up (checked).
-  const [extraTalents, setExtraTalents] = useState<NamedLookup[]>([]);
-  const [extraGifts, setExtraGifts] = useState<NamedLookup[]>([]);
-  const [extraOccupations, setExtraOccupations] = useState<NamedLookup[]>([]);
-
-  const talentOptions = [...lookups.talents, ...extraTalents];
-  const giftOptions = [...lookups.spiritualGifts, ...extraGifts];
-  const occupationOptions = [...lookups.occupations, ...extraOccupations];
+  const talentOptions = lookups.talents;
+  const giftOptions = lookups.spiritualGifts;
+  const occupationOptions = lookups.occupations;
 
   const geo = useGeographyCascade(form.province_id, form.district_id, form.sector_id, form.cellule_id);
+
+  // Local preview for the picture — either a freshly chosen file (object URL,
+  // revoked on change/unmount) or the member's existing picture_url when editing.
+  const [pictureError, setPictureError] = useState<string | null>(null);
+  const [picturePreview, setPicturePreview] = useState<string | null>(member?.picture_url ?? null);
+  const objectUrlRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
+  }, []);
+
+  function handlePictureChange(file: File | null): void {
+    setPictureError(null);
+    if (!file) {
+      set('pictureFile', null);
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+      setPicturePreview(member?.picture_url ?? null);
+      return;
+    }
+    if (!ACCEPTED_PICTURE_TYPES.includes(file.type)) {
+      setPictureError('Please choose a JPEG, PNG, or WEBP image.');
+      return;
+    }
+    if (file.size > MAX_PICTURE_BYTES) {
+      setPictureError('That image is larger than 2MB — please choose a smaller one.');
+      return;
+    }
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const url = URL.createObjectURL(file);
+    objectUrlRef.current = url;
+    setPicturePreview(url);
+    set('pictureFile', file);
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -389,6 +465,48 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 onChange={(e) => set('member_since', e.target.value)}
               />
             </Field>
+
+            <div className="field field-col-12" style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
+              <div
+                className="avatar"
+                style={{
+                  width: 72,
+                  height: 72,
+                  fontSize: 22,
+                  overflow: 'hidden',
+                  backgroundImage: picturePreview ? `url(${picturePreview})` : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  flex: '0 0 auto',
+                }}
+              >
+                {!picturePreview && ((form.first_name[0] ?? '') + (form.last_name[0] ?? '')).toUpperCase()}
+              </div>
+              <div>
+                <label className="label">Photo</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handlePictureChange(e.target.files?.[0] ?? null)}
+                  />
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()}>
+                    <Icon name="upload" size={12} /> {picturePreview ? 'Change photo' : 'Upload photo'}
+                  </button>
+                  {picturePreview && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handlePictureChange(null)}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <span className="hint">JPEG, PNG, or WEBP — up to 2MB.</span>
+                {pictureError && (
+                  <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>{pictureError}</div>
+                )}
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -408,15 +526,6 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               placeholder={`Search ${talentOptions.length} talents…`}
               emptyText="No talents defined yet."
             />
-            <AddOtherField
-              label="Not on the list?"
-              placeholder="Add a talent that isn't listed above"
-              onCreate={createTalent}
-              onAdded={(created) => {
-                setExtraTalents((prev) => [...prev, created]);
-                set('talent', [...form.talent, created.id]);
-              }}
-            />
 
             <MultiSelectChecklist
               label="Spiritual Gifts"
@@ -429,15 +538,6 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               placeholder={`Search ${giftOptions.length} spiritual gifts…`}
               emptyText="No spiritual gifts defined yet."
             />
-            <AddOtherField
-              label="Not on the list?"
-              placeholder="Add a spiritual gift that isn't listed above"
-              onCreate={createSpiritualGift}
-              onAdded={(created) => {
-                setExtraGifts((prev) => [...prev, created]);
-                set('spiritual_gift', [...form.spiritual_gift, created.id]);
-              }}
-            />
 
             <MultiSelectChecklist
               label="Occupations"
@@ -449,17 +549,14 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               placeholder={`Search ${occupationOptions.length} occupations…`}
               emptyText="No occupations defined yet."
             />
-            <AddOtherField
-              label="Not on the list?"
-              placeholder="Add an occupation that isn't listed above"
-              onCreate={createOccupation}
-              onAdded={(created) => {
-                setExtraOccupations((prev) => [...prev, created]);
-                set('occupation', [...form.occupation, created.id]);
-              }}
-            />
             <div className="field field-col-12" style={{ marginTop: 8 }}>
               <SectionTitle>Education</SectionTitle>
+              {isEditing && educationPairingUncertain(member) && (
+                <div className="state-banner info" style={{ marginBottom: 12 }}>
+                  This member has multiple education levels, and the API doesn't return which field of study belongs
+                  to which — please re-select the fields of study below.
+                </div>
+              )}
               <EducationEntries
                 educations={lookups.educations}
                 entries={form.education}
@@ -573,6 +670,12 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
 
             <div className="field field-col-12" style={{ marginTop: 8 }}>
               <SectionTitle>Church Departments</SectionTitle>
+              {isEditing && departmentPairingUncertain(member) && (
+                <div className="state-banner info" style={{ marginBottom: 12 }}>
+                  This member belongs to multiple departments, and the API doesn't return which responsibility
+                  belongs to which — please re-select the responsibilities below.
+                </div>
+              )}
               <DepartmentEntries
                 departments={lookups.departments}
                 entries={form.department}

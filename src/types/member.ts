@@ -41,6 +41,11 @@ export interface MemberPayload {
   mobile_tel?: string;
   email?: string;
 
+  // Image file (jpeg, jpg, png, webp), max 2MB. Only present when the user
+  // attached/changed a picture in the form; when set, the request is sent as
+  // multipart/form-data instead of JSON (see buildMemberFormData in api/members.ts).
+  picture?: File;
+
   province_id?: number;
   district_id?: number;
   sector_id?: number;
@@ -50,18 +55,21 @@ export interface MemberPayload {
 }
 
 // ── Shape returned by MemberResource (GET /v1/members, /v1/members/{id}) ─────
-// educations/departments come back as flat distinct lists, but faculties and
-// church_responsibilities now carry the pivot's education_id/department_id
-// (FacultyResource/ChurchResponsibilityResource expose it via whenPivotLoaded),
-// so the original education<->faculty and department<->responsibility pairing
-// can be reconstructed on the frontend by grouping on those ids.
+// educations/departments/faculties/church_responsibilities all come back as
+// flat, distinct lists on the live deployed API (confirmed against its actual
+// OpenAPI schema) — FacultyResource/ChurchResponsibilityResource there do NOT
+// expose an education_id/department_id pivot field. So which faculty belongs
+// to which education level (and which responsibility to which department)
+// can't be reconstructed from this response; education_id/department_id below
+// are typed optional only in case a future backend deploy adds them, and the
+// UI (MemberForm, MemberProfile) falls back to flat display when they're absent.
 
 export interface MemberFaculty extends NamedLookup {
-  education_id: number | null;
+  education_id?: number | null;
 }
 
 export interface MemberChurchResponsibility extends NamedLookup {
-  department_id: number | null;
+  department_id?: number | null;
 }
 
 export interface Member {

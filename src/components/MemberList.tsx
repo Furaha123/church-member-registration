@@ -226,7 +226,16 @@ export function MemberList({
                   <tr key={m.id}>
                     <td>
                       <div className="member-cell">
-                        <div className="avatar">{initials(m)}</div>
+                        <div
+                          className="avatar"
+                          style={
+                            m.picture_url
+                              ? { backgroundImage: `url(${m.picture_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                              : undefined
+                          }
+                        >
+                          {!m.picture_url && initials(m)}
+                        </div>
                         <div>
                           <div className="name">{m.first_name} {m.last_name}</div>
                           <div className="id-num">#{m.id}</div>

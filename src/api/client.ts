@@ -92,10 +92,14 @@ function extractMeta(body: unknown): PageMeta | null {
 }
 
 async function requestRaw(path: string, options: RequestInit = {}): Promise<unknown> {
+  // FormData bodies (multipart/form-data, used for member picture uploads) must
+  // NOT get an explicit Content-Type — the browser sets one itself, including
+  // the multipart boundary. Setting it manually here would break parsing.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       Accept: 'application/json',
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...options.headers,
@@ -158,6 +162,19 @@ export const apiPost = <T>(path: string, body: unknown): Promise<T> =>
 
 export const apiPut = <T>(path: string, body: unknown): Promise<T> =>
   request<T>(path, { method: 'PUT', body: JSON.stringify(body) });
+
+// Multipart submission, used only when a member picture file is attached (see
+// buildMemberFormData in api/members.ts). Plain JSON is used everywhere else.
+export const apiPostForm = <T>(path: string, form: FormData): Promise<T> =>
+  request<T>(path, { method: 'POST', body: form });
+
+// PHP does not parse multipart/form-data bodies on PUT/PATCH requests, so an
+// update that includes a file is sent as POST with Laravel's `_method` override
+// field, which its routing layer treats as a real PUT.
+export const apiPutForm = <T>(path: string, form: FormData): Promise<T> => {
+  form.append('_method', 'PUT');
+  return request<T>(path, { method: 'POST', body: form });
+};
 
 export const apiPatch = <T>(path: string, body: unknown): Promise<T> =>
   request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
