@@ -655,6 +655,23 @@ html, body {
 .checklist-item input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
 .checklist-empty { padding: 16px; font-size: 13px; color: var(--text-faint); text-align: center; }
 
+.checklist-selected {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 600; color: var(--accent-dark);
+  background: var(--accent-light); border: 1px solid var(--accent-light);
+  padding: 5px 6px 5px 12px; border-radius: 999px;
+}
+.chip-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; border: none; cursor: pointer;
+  background: transparent; color: var(--accent-dark); opacity: 0.7;
+}
+.chip-remove:hover { opacity: 1; background: rgba(0, 0, 0, 0.08); }
+
 .spinner {
   display: inline-block;
   width: 14px;
@@ -668,6 +685,35 @@ html, body {
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* SKELETON LOADERS — used while a detail view's data (e.g. resolved geography
+   names) is still being fetched, so the page shows a placeholder shape instead
+   of flashing "—" and filling in piecemeal. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: 6px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+:root[data-theme="dark"] .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton-line { height: 13px; }
+.skeleton-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
 }
 
 /* REPEATABLE ENTRY CARDS (education / department) */

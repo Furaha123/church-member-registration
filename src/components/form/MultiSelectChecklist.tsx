@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { NamedLookup } from '../../types/lookup';
+import { Icon } from '../Layout';
 
 interface MultiSelectChecklistProps {
   label: string;
@@ -30,12 +31,23 @@ export function MultiSelectChecklist({
     ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
     : options;
 
+  // Selected options aren't always visible in the (searched/scrolled) list
+  // below, so they're surfaced as removable chips regardless of what's
+  // currently in view — this also covers options not yet loaded by name.
+  const selectedOptions = selected
+    .map((id) => options.find((o) => o.id === id))
+    .filter((o): o is NamedLookup => o !== undefined);
+
   function toggle(id: number) {
     if (selected.includes(id)) {
       onChange(selected.filter((s) => s !== id));
     } else {
       onChange([...selected, id]);
     }
+  }
+
+  function remove(id: number) {
+    onChange(selected.filter((s) => s !== id));
   }
 
   return (
@@ -48,6 +60,23 @@ export function MultiSelectChecklist({
         <span className="checklist-count">{selected.length} selected</span>
       </div>
       <div className="checklist">
+        {selectedOptions.length > 0 && (
+          <div className="checklist-selected">
+            {selectedOptions.map((option) => (
+              <span key={option.id} className="chip">
+                {option.name}
+                <button
+                  type="button"
+                  className="chip-remove"
+                  onClick={() => remove(option.id)}
+                  aria-label={`Remove ${option.name}`}
+                >
+                  <Icon name="close" size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         {searchable && (
           <div className="checklist-search">
             <input

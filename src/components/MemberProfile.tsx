@@ -112,9 +112,11 @@ function PairedGroup({ label, parents, childrenOf, tone = 'neutral' }: PairedGro
  */
 function useGeographyNames(member: Member) {
   const [names, setNames] = useState({ province: '—', district: '—', sector: '—', cellule: '—', village: '—' });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
 
     async function resolve() {
       const next = { province: '—', district: '—', sector: '—', cellule: '—', village: '—' };
@@ -142,14 +144,17 @@ function useGeographyNames(member: Member) {
       } catch {
         // Leave whatever was resolved so far; geography display degrades to '—'.
       }
-      if (!cancelled) setNames(next);
+      if (!cancelled) {
+        setNames(next);
+        setLoading(false);
+      }
     }
 
     void resolve();
     return () => { cancelled = true; };
   }, [member.province_id, member.district_id, member.sector_id, member.cellule_id, member.village_id]);
 
-  return names;
+  return { ...names, loading };
 }
 
 // True when this member has more than one education/department entry and the
@@ -165,10 +170,69 @@ function hasReliableDepartmentPairing(member: Member): boolean {
   return member.church_responsibilities.some((r) => r.department_id !== null && r.department_id !== undefined);
 }
 
+// Placeholder shape matching the real profile layout below, shown until every
+// piece of the profile's data (including the geography names, which resolve
+// via several follow-up requests) is ready — so the page appears once, fully
+// formed, instead of rendering with "—" gaps that fill in a moment later.
+export function MemberProfileSkeleton({ onBack }: { onBack: () => void }) {
+  return (
+    <div>
+      <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ marginBottom: 20 }}>
+        ← Back to Members
+      </button>
+
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+          <div className="skeleton" style={{ width: 64, height: 64, borderRadius: '50%', flex: '0 0 auto' }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="skeleton skeleton-line" style={{ width: 220, height: 20 }} />
+            <div className="skeleton skeleton-line" style={{ width: 160 }} />
+          </div>
+          <div className="skeleton" style={{ width: 76, height: 32, borderRadius: 8 }} />
+        </div>
+
+        <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '28px 32px' }}>
+          {['Personal', 'Contact', 'Geography'].map((section) => (
+            <div key={section}>
+              <div className="section-title"><h3>{section}</h3></div>
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="skeleton-row">
+                  <div className="skeleton skeleton-line" style={{ width: 90 }} />
+                  <div className="skeleton skeleton-line" style={{ width: 110 }} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 8 }}>
+          <div className="section-title" style={{ marginTop: 24 }}><h3>Church &amp; Work</h3></div>
+          <div className="detail-tag-list">
+            {[1, 2, 3, 4].map((row) => (
+              <div key={row} style={{ paddingTop: 16, paddingBottom: 16, borderBottom: '1px solid var(--line)' }}>
+                <div className="skeleton skeleton-line" style={{ width: 140, marginBottom: 12 }} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="skeleton" style={{ width: 72, height: 24, borderRadius: 999 }} />
+                  <div className="skeleton" style={{ width: 96, height: 24, borderRadius: 999 }} />
+                  <div className="skeleton" style={{ width: 64, height: 24, borderRadius: 999 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
   const geoNames = useGeographyNames(member);
   const educationPaired = hasReliableEducationPairing(member);
   const departmentPaired = hasReliableDepartmentPairing(member);
+
+  if (geoNames.loading) {
+    return <MemberProfileSkeleton onBack={onBack} />;
+  }
 
   return (
     <div>
