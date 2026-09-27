@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client';
+import { apiGet } from './client';
 import type {
   NamedLookup,
   DistrictLookup,
@@ -22,17 +22,12 @@ export const getFacultiesForEducation = (educationId: number): Promise<NamedLook
 export const getChurchResponsibilitiesForDepartment = (departmentId: number): Promise<NamedLookup[]> =>
   apiGet(`/members/departments/${departmentId}/church-responsibilities`);
 
-// ── Create a lookup value the user couldn't find in the list ─────────────────
-// Each returns the newly created { id, name } so it can be selected immediately.
-// Requires the matching backend endpoints (POST of the GET routes above).
-export const createTalent = (name: string): Promise<NamedLookup> =>
-  apiPost('/members/talents', { name });
-export const createSpiritualGift = (name: string): Promise<NamedLookup> =>
-  apiPost('/members/spiritual-gifts', { name });
-export const createOccupation = (name: string): Promise<NamedLookup> =>
-  apiPost('/members/occupations', { name });
-export const createFacultyForEducation = (educationId: number, name: string): Promise<NamedLookup> =>
-  apiPost(`/members/educations/${educationId}/faculties`, { name });
+// Note: there is no way to create a new talent/spiritual gift/occupation/faculty
+// from the frontend — the live API only exposes GET on these lookup routes
+// (confirmed: POST returns 405 Method Not Allowed). An earlier version of this
+// form had "not on the list?" inputs that called such endpoints; they were
+// removed since the deployed backend doesn't support them. New lookup values
+// need to be added on the backend (e.g. a seeder or an admin route) first.
 
 // ── Geography (province -> district -> sector -> cellule -> village) ─────────
 // Note the backend's route shape is flat, e.g. GET /v1/{province}/districts,

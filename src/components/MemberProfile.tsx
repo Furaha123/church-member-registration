@@ -152,8 +152,23 @@ function useGeographyNames(member: Member) {
   return names;
 }
 
+// True when this member has more than one education/department entry and the
+// API returned no pivot data to tell their faculties/responsibilities apart —
+// pairing them up would be a guess, so the flat lists are shown instead.
+function hasReliableEducationPairing(member: Member): boolean {
+  if (member.educations.length <= 1) return true;
+  return member.faculties.some((f) => f.education_id !== null && f.education_id !== undefined);
+}
+
+function hasReliableDepartmentPairing(member: Member): boolean {
+  if (member.departments.length <= 1) return true;
+  return member.church_responsibilities.some((r) => r.department_id !== null && r.department_id !== undefined);
+}
+
 export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
   const geoNames = useGeographyNames(member);
+  const educationPaired = hasReliableEducationPairing(member);
+  const departmentPaired = hasReliableDepartmentPairing(member);
 
   return (
     <div>
@@ -163,8 +178,19 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
 
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-          <div className="avatar" style={{ width: 64, height: 64, fontSize: 20 }}>
-            {getInitials(member.first_name, member.last_name)}
+          <div
+            className="avatar"
+            style={{
+              width: 64,
+              height: 64,
+              fontSize: 20,
+              overflow: 'hidden',
+              backgroundImage: member.picture_url ? `url(${member.picture_url})` : undefined,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          >
+            {!member.picture_url && getInitials(member.first_name, member.last_name)}
           </div>
           <div style={{ flex: 1 }}>
             <h2 className="card-title" style={{ margin: 0 }}>{member.first_name} {member.last_name}</h2>
@@ -201,20 +227,40 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
         <div style={{ marginTop: 8 }}>
           <div className="section-title" style={{ marginTop: 24 }}><h3>Church &amp; Work</h3></div>
           <div className="detail-tag-list">
-            <PairedGroup
-              label="Departments & Responsibilities"
-              parents={member.departments}
-              childrenOf={(deptId) => member.church_responsibilities.filter((cr) => cr.department_id === deptId)}
-              tone="gold"
-            />
+            {departmentPaired ? (
+              <PairedGroup
+                label="Departments & Responsibilities"
+                parents={member.departments}
+                childrenOf={(deptId) => member.church_responsibilities.filter((cr) => cr.department_id === deptId)}
+                tone="gold"
+              />
+            ) : (
+              <>
+                <TagGroup label="Departments" items={member.departments} tone="gold" />
+                <TagGroup label="Church Responsibilities" items={member.church_responsibilities} tone="gold" />
+                <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: -8, paddingBottom: 8 }}>
+                  The API doesn't report which responsibility belongs to which department for this member.
+                </div>
+              </>
+            )}
             <TagGroup label="Talents" items={member.talents} tone="blue" />
             <TagGroup label="Spiritual Gifts" items={member.spiritual_gifts} tone="blue" />
             <TagGroup label="Occupations" items={member.occupations} />
-            <PairedGroup
-              label="Education & Faculties"
-              parents={member.educations}
-              childrenOf={(eduId) => member.faculties.filter((f) => f.education_id === eduId)}
-            />
+            {educationPaired ? (
+              <PairedGroup
+                label="Education & Faculties"
+                parents={member.educations}
+                childrenOf={(eduId) => member.faculties.filter((f) => f.education_id === eduId)}
+              />
+            ) : (
+              <>
+                <TagGroup label="Education" items={member.educations} />
+                <TagGroup label="Fields of Study" items={member.faculties} />
+                <div style={{ fontSize: 12, color: 'var(--cream-faint)', marginTop: -8, paddingBottom: 8 }}>
+                  The API doesn't report which field of study belongs to which education level for this member.
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
