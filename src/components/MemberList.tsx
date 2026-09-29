@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Member, MemberFilters } from '../types/member';
+import type { Family } from '../types/family';
 import { Icon } from './Layout';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS } from '../data/constants';
 import { MemberFiltersPanel } from './form/MemberFilters';
@@ -14,6 +15,24 @@ interface DirectoryProps {
   onNewMember: () => void;
   onViewMember: (id: number) => void;
   onEditMember: (id: number) => void;
+  // Families data for the "Has Family" column (per the "add family shortcuts
+  // to the member list" request) — Family creation itself only happens from
+  // the Families tab's own "New Family" button, or the prompt shown right
+  // after registering a married member.
+  families: Family[];
+  onOpenFamily: (familyId: number) => void;
+}
+
+// Finds the family (if any) this member belongs to, and the role they hold in
+// it — MemberResource doesn't expose a family relationship directly, so this
+// is resolved by scanning the separately-fetched families list for a matching
+// member_id in each family's `members` array.
+function familyInfoFor(member: Member, families: Family[]): { family: Family; roleType: string } | null {
+  for (const family of families) {
+    const entry = family.members.find((m) => m.member_id === member.id);
+    if (entry) return { family, roleType: entry.role_type };
+  }
+  return null;
 }
 
 const PAGE_SIZE = 5;
@@ -46,6 +65,8 @@ export function MemberList({
   onNewMember,
   onViewMember,
   onEditMember,
+  families,
+  onOpenFamily,
 }: DirectoryProps) {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -218,11 +239,14 @@ export function MemberList({
                   <th>Phone</th>
                   <th>Departments</th>
                   <th>Employed</th>
+                  <th>Has Family</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {pagedMembers.map((m) => (
+                {pagedMembers.map((m) => {
+                  const familyInfo = familyInfoFor(m, families);
+                  return (
                   <tr key={m.id}>
                     <td>
                       <div className="member-cell">
@@ -255,6 +279,29 @@ export function MemberList({
                       <span className={'tag ' + (m.employed ? 'green' : '')}>{m.employed === null ? '—' : m.employed ? 'Yes' : 'No'}</span>
                     </td>
                     <td>
+                      {familyInfo ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenFamily(familyInfo.family.id)}
+                          title={familyInfo.family.family_name}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color: 'var(--success)',
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          Yes
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--cream-faint)' }}>No</span>
+                      )}
+                    </td>
+                    <td>
                       <div className="row-actions">
                         <button
                           type="button"
@@ -277,10 +324,11 @@ export function MemberList({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {pagedMembers.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
                       {isSearching ? 'No members match your search.' : 'No members found.'}
                     </td>
                   </tr>

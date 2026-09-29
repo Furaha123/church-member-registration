@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Member } from '../types/member';
 import type { Family } from '../types/family';
 import { useFamilies } from '../hooks/useFamilies';
@@ -8,6 +8,12 @@ import { Icon } from './Layout';
 
 interface FamiliesProps {
   members: Member[];
+  // Set by the Members directory's "Family"/"Birth Family" button so arriving
+  // here jumps straight to that family's detail instead of the list. Cleared
+  // via onOpenFamilyIdConsumed once handled, so switching tabs later doesn't
+  // re-trigger it.
+  openFamilyId?: number | null;
+  onOpenFamilyIdConsumed?: () => void;
 }
 
 type View =
@@ -23,11 +29,20 @@ function membersSummary(family: Family): string {
     .join(', ');
 }
 
-export function Families({ members }: FamiliesProps) {
+export function Families({ members, openFamilyId, onOpenFamilyIdConsumed }: FamiliesProps) {
   const { families, loading, error, addFamily, editFamily, removeFamily } = useFamilies();
   const [view, setView] = useState<View>({ mode: 'list' });
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (openFamilyId == null) return;
+    const target = families.find((f) => f.id === openFamilyId);
+    if (target) {
+      setView({ mode: 'view', family: target });
+      onOpenFamilyIdConsumed?.();
+    }
+  }, [openFamilyId, families, onOpenFamilyIdConsumed]);
 
   const [deleting, setDeleting] = useState(false);
   const deletingFamily =
