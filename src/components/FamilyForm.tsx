@@ -4,6 +4,7 @@ import type { Family, FamilyPayload, FamilyMemberInput, RoleType } from '../type
 import { ROLE_TYPES } from '../types/family';
 import { ApiError } from '../api/client';
 import { Icon } from './Layout';
+import { SearchableSelect } from './form/SearchableSelect';
 
 interface FamilyFormProps {
   family?: Family;
@@ -181,16 +182,13 @@ export function FamilyForm({ family, members, onSubmit, onSuccess, onCancel, see
               <div className="form-grid">
                 <div className="field field-col-6">
                   <label className="label">Member</label>
-                  <select
-                    className="select"
+                  <SearchableSelect
+                    options={members.map((m) => ({ id: m.id, label: memberLabel(m) }))}
                     value={row.member_id || ''}
-                    onChange={(e) => updateMember(index, { member_id: Number(e.target.value) })}
-                  >
-                    <option value="" disabled>Select…</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>{memberLabel(m)}</option>
-                    ))}
-                  </select>
+                    onChange={(id) => updateMember(index, { member_id: id })}
+                    placeholder="Search members…"
+                    emptyText="No matching members."
+                  />
                 </div>
                 <div className="field field-col-6">
                   <label className="label">Role</label>

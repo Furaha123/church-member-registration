@@ -10,6 +10,7 @@ import { ResetPassword } from './components/ResetPassword';
 import { TempPasswordBanner } from './components/TempPasswordBanner';
 import { FamilySetup } from './components/FamilySetup';
 import { useMembers } from './hooks/useMembers';
+import { useFamilies } from './hooks/useFamilies';
 import { useAuth } from './context/AuthContext';
 import { MARITAL_STATUS_OPTIONS } from './data/constants';
 import type { Member, MemberFilters } from './types/member';
@@ -35,9 +36,11 @@ export function App() {
     isAuthenticated,
     memberFilters,
   );
+  const { families } = useFamilies(isAuthenticated);
   const [route, setRoute] = useState<Route>('welcome');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [familySeedMember, setFamilySeedMember] = useState<Member | null>(null);
+  const [openFamilyId, setOpenFamilyId] = useState<number | null>(null);
 
   const isAdmin = user?.role === 'admin';
   const selectedMember = selectedId !== null ? getMemberById(selectedId) : undefined;
@@ -50,6 +53,11 @@ export function App() {
   function openEdit(id: number) {
     setSelectedId(id);
     setRoute('edit');
+  }
+
+  function openMemberFamily(familyId: number) {
+    setOpenFamilyId(familyId);
+    setRoute('families');
   }
 
   async function handleLogout() {
@@ -128,10 +136,18 @@ export function App() {
                   onNewMember={() => setRoute('register')}
                   onViewMember={openProfile}
                   onEditMember={openEdit}
+                  families={families}
+                  onOpenFamily={openMemberFamily}
                 />
               )}
 
-              {route === 'families' && <Families members={members} />}
+              {route === 'families' && (
+                <Families
+                  members={members}
+                  openFamilyId={openFamilyId}
+                  onOpenFamilyIdConsumed={() => setOpenFamilyId(null)}
+                />
+              )}
 
               {route === 'admin' && isAdmin && user && (
                 <AdminUsers currentUserId={user.id} />
