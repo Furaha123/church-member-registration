@@ -191,7 +191,7 @@ html, body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 36px 40px;
+  padding: 26px 32px;
   box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06);
 }
 .card-header {
@@ -199,8 +199,8 @@ html, body {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding-bottom: 24px;
-  margin-bottom: 28px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--border);
 }
 .card-title {
@@ -545,7 +545,7 @@ html, body {
 .stat-card .num { font-family: 'Inter', sans-serif; font-size: 30px; font-weight: 700; color: var(--text); margin-top: 10px; line-height: 1; }
 .stat-card .delta { margin-top: 6px; font-size: 12.5px; color: var(--accent); }
 
-.directory-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+.directory-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
 .search { flex: 1; min-width: 280px; position: relative; }
 .search input {
   width: 100%;

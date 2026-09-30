@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Member } from '../types/member';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
 import { resolveMediaUrl } from '../api/client';
+import { toDisplayLabel } from '../utils/format';
 import {
   getDistrictsForProvince,
   getSectorsForDistrict,
@@ -18,7 +19,8 @@ interface MemberProfileProps {
 
 function lookupName(options: { id: number; name: string }[], id: number | null): string {
   if (id === null) return '—';
-  return options.find((o) => o.id === id)?.name ?? '—';
+  const name = options.find((o) => o.id === id)?.name;
+  return name ? toDisplayLabel(name) : '—';
 }
 
 function getInitials(firstName: string, lastName: string): string {
