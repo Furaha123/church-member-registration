@@ -8,6 +8,7 @@ import { MultiSelectChecklist } from './form/MultiSelectChecklist';
 import { EducationEntries } from './form/EducationEntries';
 import { DepartmentEntries } from './form/DepartmentEntries';
 import { ApiError, resolveMediaUrl } from '../api/client';
+import { toDisplayLabel } from '../utils/format';
 
 interface MemberFormProps {
   member?: Member;
@@ -435,7 +436,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 onChange={(e) => set('sex_id', e.target.value === '' ? '' : Number(e.target.value))}
               >
                 <option value="" disabled>Select…</option>
-                {SEX_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                {SEX_OPTIONS.map((o) => <option key={o.id} value={o.id}>{toDisplayLabel(o.name)}</option>)}
               </select>
             </Field>
             <Field label="Marital Status" required span={4}>
@@ -445,7 +446,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 onChange={(e) => set('marital_status_id', e.target.value === '' ? '' : Number(e.target.value))}
               >
                 <option value="" disabled>Select…</option>
-                {MARITAL_STATUS_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                {MARITAL_STATUS_OPTIONS.map((o) => <option key={o.id} value={o.id}>{toDisplayLabel(o.name)}</option>)}
               </select>
             </Field>
             <Field label="Currently Employed" span={4}>
@@ -768,8 +769,8 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 8, padding: '22px 26px', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px 28px' }}>
                 {[
                   ['Full Name', `${form.first_name || '—'} ${form.last_name || ''}`],
-                  ['Gender', SEX_OPTIONS.find((o) => o.id === form.sex_id)?.name ?? '—'],
-                  ['Marital Status', MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name ?? '—'],
+                  ['Gender', toDisplayLabel(SEX_OPTIONS.find((o) => o.id === form.sex_id)?.name ?? '—')],
+                  ['Marital Status', toDisplayLabel(MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name ?? '—')],
                   ['Mobile', form.mobile_tel || '—'],
                   ['Talents', String(form.talent.length)],
                   ['Spiritual Gifts', String(form.spiritual_gift.length)],

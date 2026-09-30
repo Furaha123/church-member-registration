@@ -29,6 +29,7 @@ export function AdminUsers({ currentUserId }: AdminUsersProps) {
   const [editDraft, setEditDraft] = useState<EditDraft>({ name: '', email: '' });
   const [rowError, setRowError] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
   async function handleCreate(): Promise<void> {
     if (creating || createName.trim() === '' || createEmail.trim() === '') return;
@@ -100,6 +101,13 @@ export function AdminUsers({ currentUserId }: AdminUsersProps) {
 
   const editingUser = editId !== null ? users.find((u) => u.id === editId) ?? null : null;
   const deletingUser = pendingDeleteId !== null ? users.find((u) => u.id === pendingDeleteId) ?? null : null;
+
+  const isSearching = search.trim() !== '';
+  const filteredUsers = users.filter((user) => {
+    if (!isSearching) return true;
+    const q = search.trim().toLowerCase();
+    return user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q);
+  });
 
   return (
     <div className="card">
@@ -198,6 +206,17 @@ export function AdminUsers({ currentUserId }: AdminUsersProps) {
         </div>
       )}
 
+      <div className="directory-toolbar">
+        <div className="search">
+          <span className="ico"><Icon name="search" size={16} /></span>
+          <input
+            placeholder="Search by name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       {loading ? (
         <div className="checklist-empty">Loading users…</div>
       ) : (
@@ -213,7 +232,7 @@ export function AdminUsers({ currentUserId }: AdminUsersProps) {
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => {
+              {filteredUsers.map((user) => {
                 const isSelf = user.id === currentUserId;
                 return (
                   <tr key={user.id}>
@@ -266,10 +285,10 @@ export function AdminUsers({ currentUserId }: AdminUsersProps) {
                   </tr>
                 );
               })}
-              {users.length === 0 && (
+              {filteredUsers.length === 0 && (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
-                    No users found.
+                    {isSearching ? 'No users match your search.' : 'No users found.'}
                   </td>
                 </tr>
               )}

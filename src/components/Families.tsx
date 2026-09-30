@@ -34,6 +34,7 @@ export function Families({ members, openFamilyId, onOpenFamilyIdConsumed }: Fami
   const [view, setView] = useState<View>({ mode: 'list' });
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (openFamilyId == null) return;
@@ -47,6 +48,17 @@ export function Families({ members, openFamilyId, onOpenFamilyIdConsumed }: Fami
   const [deleting, setDeleting] = useState(false);
   const deletingFamily =
     pendingDeleteId !== null ? families.find((f) => f.id === pendingDeleteId) ?? null : null;
+
+  const isSearching = search.trim() !== '';
+  const filteredFamilies = families.filter((family) => {
+    if (!isSearching) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      family.family_name.toLowerCase().includes(q) ||
+      (family.address ?? '').toLowerCase().includes(q) ||
+      family.members.some((m) => `${m.first_name} ${m.last_name}`.toLowerCase().includes(q))
+    );
+  });
 
   async function confirmDelete(id: number): Promise<void> {
     setDeleteError(null);
@@ -115,6 +127,17 @@ export function Families({ members, openFamilyId, onOpenFamilyIdConsumed }: Fami
 
       {error && <div className="state-banner error">Couldn't load families: {error}</div>}
 
+      <div className="directory-toolbar">
+        <div className="search">
+          <span className="ico"><Icon name="search" size={16} /></span>
+          <input
+            placeholder="Search by family name, address, or member…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       {loading ? (
         <div className="checklist-empty">Loading families…</div>
       ) : (
@@ -130,7 +153,7 @@ export function Families({ members, openFamilyId, onOpenFamilyIdConsumed }: Fami
               </tr>
             </thead>
             <tbody>
-              {families.map((family) => (
+              {filteredFamilies.map((family) => (
                 <tr key={family.id}>
                   <td>
                     <div className="name">{family.family_name}</div>
@@ -174,10 +197,10 @@ export function Families({ members, openFamilyId, onOpenFamilyIdConsumed }: Fami
                   </td>
                 </tr>
               ))}
-              {families.length === 0 && (
+              {filteredFamilies.length === 0 && (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
-                    No families registered yet.
+                    {isSearching ? 'No families match your search.' : 'No families registered yet.'}
                   </td>
                 </tr>
               )}

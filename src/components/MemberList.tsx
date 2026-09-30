@@ -6,6 +6,7 @@ import { MemberFiltersPanel } from './form/MemberFilters';
 import { getMembersPage, exportMembers } from '../api/members';
 import { resolveMediaUrl } from '../api/client';
 import { notifyError } from '../notify';
+import { toDisplayLabel } from '../utils/format';
 
 // Saves a fetched Blob to disk via a throwaway <a download> link — the
 // standard way to trigger a "Save As" for data that only exists in memory
@@ -73,7 +74,8 @@ function countActiveFilters(filters: MemberFilters): number {
 
 function lookupName(options: { id: number; name: string }[], id: number | null): string {
   if (id === null) return '—';
-  return options.find((o) => o.id === id)?.name ?? '—';
+  const name = options.find((o) => o.id === id)?.name;
+  return name ? toDisplayLabel(name) : '—';
 }
 
 function initials(m: Member): string {
@@ -291,7 +293,8 @@ export function MemberList({
               <thead>
                 <tr>
                   <th>Member</th>
-                  <th>Gender / Marital Status</th>
+                  <th>Gender</th>
+                  <th>Marital Status</th>
                   <th>Email</th>
                   <th>Phone</th>
                   <th>Departments</th>
@@ -316,18 +319,11 @@ export function MemberList({
                         >
                           {!pictureUrl && initials(m)}
                         </div>
-                        <div>
-                          <div className="name">{m.first_name} {m.last_name}</div>
-                          <div className="id-num">#{m.id}</div>
-                        </div>
+                        <div className="name">{m.first_name}</div>
                       </div>
                     </td>
-                    <td>
-                      <div style={{ color: 'var(--cream)' }}>{lookupName(SEX_OPTIONS, m.sex_id)}</div>
-                      <div style={{ fontSize: 12, color: 'var(--cream-faint)' }}>
-                        {lookupName(MARITAL_STATUS_OPTIONS, m.marital_status_id)}
-                      </div>
-                    </td>
+                    <td>{lookupName(SEX_OPTIONS, m.sex_id)}</td>
+                    <td>{lookupName(MARITAL_STATUS_OPTIONS, m.marital_status_id)}</td>
                     <td>{m.email || '—'}</td>
                     <td>{m.mobile_tel || '—'}</td>
                     <td><span className="tag gold">{namesOf(m.departments)}</span></td>
@@ -384,7 +380,7 @@ export function MemberList({
                 })}
                 {pagedMembers.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
                       {isSearching ? 'No members match your search.' : 'No members found.'}
                     </td>
                   </tr>
