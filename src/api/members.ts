@@ -1,4 +1,4 @@
-import { apiGet, apiGetWithMeta, apiPost, apiPostForm, apiPut, apiPutForm, type PageMeta } from './client';
+import { apiGet, apiGetWithMeta, apiPost, apiPostForm, apiPut, apiPutForm, apiDownload, type PageMeta, type DownloadResult } from './client';
 import type { Member, MemberPayload, MemberFilters } from '../types/member';
 
 const BASE = '/members';
@@ -51,6 +51,17 @@ export const getMembersPage = (filters: MemberFilters): Promise<MembersPage> =>
     meta,
   }));
 
+function timestampForFilename(): string {
+  // "2026-09-30T14-05-22" style, safe to use in a filename on every OS.
+  return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+}
+
+// GET /members/export — same filter query params as GET /members (page/
+// per_page are ignored server-side: it always returns every matching member),
+// but responds with an .xlsx file instead of JSON.
+export const exportMembers = (filters: MemberFilters = {}): Promise<DownloadResult> =>
+  apiDownload(`${BASE}/export${buildMemberQuery(filters)}`, `members-${timestampForFilename()}.xlsx`);
+
 export const getMember = (id: number): Promise<Member> => apiGet(`${BASE}/${id}`);
 
 // StoreMemberRequest/UpdateMemberRequest accept plain JSON just fine when no
@@ -93,7 +104,11 @@ function buildMemberFormData(data: MemberPayload): FormData {
   if (data.cellule_id !== undefined) form.append('cellule_id', String(data.cellule_id));
   if (data.cell_id !== undefined) form.append('cell_id', String(data.cell_id));
   if (data.village_id !== undefined) form.append('village_id', String(data.village_id));
-  if (data.picture) form.append('picture', data.picture);
+  // The backend's multipart field for the upload is named `pictureFile`, not
+  // `picture` (confirmed against the live API — POST/PUT /members request a
+  // pictureFile field). `picture_url` on the response is a different, output-only
+  // field, so don't confuse the two.
+  if (data.picture) form.append('pictureFile', data.picture);
 
   return form;
 }

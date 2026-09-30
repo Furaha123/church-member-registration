@@ -33,6 +33,10 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   copy: <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
   moon: <path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z" />,
+  // The family a member currently heads/belongs to.
+  home: <><path d="M3 11l9-8 9 8" /><path d="M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9" /></>,
+  // The family a member was born into.
+  sprout: <><path d="M12 21V10" /><path d="M12 10a5 5 0 00-5-5C7 8.3 9.7 11 13 11" /><path d="M12 14a5 5 0 005-5c-5 0-7.7 2.7-7.7 6" /></>,
 };
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {

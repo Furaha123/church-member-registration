@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Member } from '../types/member';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
+import { resolveMediaUrl } from '../api/client';
 import {
   getDistrictsForProvince,
   getSectorsForDistrict,
@@ -229,6 +230,7 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
   const geoNames = useGeographyNames(member);
   const educationPaired = hasReliableEducationPairing(member);
   const departmentPaired = hasReliableDepartmentPairing(member);
+  const pictureUrl = resolveMediaUrl(member.picture_url);
 
   if (geoNames.loading) {
     return <MemberProfileSkeleton onBack={onBack} />;
@@ -249,12 +251,12 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
               height: 64,
               fontSize: 20,
               overflow: 'hidden',
-              backgroundImage: member.picture_url ? `url(${member.picture_url})` : undefined,
+              backgroundImage: pictureUrl ? `url(${pictureUrl})` : undefined,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
             }}
           >
-            {!member.picture_url && getInitials(member.first_name, member.last_name)}
+            {!pictureUrl && getInitials(member.first_name, member.last_name)}
           </div>
           <div style={{ flex: 1 }}>
             <h2 className="card-title" style={{ margin: 0 }}>{member.first_name} {member.last_name}</h2>

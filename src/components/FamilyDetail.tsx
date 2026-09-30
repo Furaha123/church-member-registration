@@ -27,7 +27,7 @@ export function FamilyDetail({ family, onEdit, onBack }: FamilyDetailProps) {
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
           <div className="avatar" style={{ width: 64, height: 64, fontSize: 20 }}>
-            <Icon name="lock" size={22} />
+            <Icon name="home" size={26} />
           </div>
           <div style={{ flex: 1 }}>
             <h2 className="card-title" style={{ margin: 0 }}>{family.family_name}</h2>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AppHeader, type Route } from './components/Layout';
 import { Welcome } from './components/Welcome';
 import { MemberList } from './components/MemberList';
@@ -10,8 +10,9 @@ import { ResetPassword } from './components/ResetPassword';
 import { TempPasswordBanner } from './components/TempPasswordBanner';
 import { FamilySetup } from './components/FamilySetup';
 import { useMembers } from './hooks/useMembers';
-import { useFamilies } from './hooks/useFamilies';
 import { useAuth } from './context/AuthContext';
+import { getMember } from './api/members';
+import { notifyError } from './notify';
 import { MARITAL_STATUS_OPTIONS } from './data/constants';
 import type { Member, MemberFilters } from './types/member';
 
@@ -36,19 +37,30 @@ export function App() {
     isAuthenticated,
     memberFilters,
   );
-  const { families } = useFamilies(isAuthenticated);
   const [route, setRoute] = useState<Route>('welcome');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [familySeedMember, setFamilySeedMember] = useState<Member | null>(null);
   const [openFamilyId, setOpenFamilyId] = useState<number | null>(null);
+  // The directory list loads members in bulk; the profile screen instead
+  // hits GET /members/{id} directly so what's shown (picture included) is
+  // always the backend's current record for that one member, not a possibly
+  // stale copy from the bulk fetch.
+  const [profileMember, setProfileMember] = useState<Member | null>(null);
 
   const isAdmin = user?.role === 'admin';
   const selectedMember = selectedId !== null ? getMemberById(selectedId) : undefined;
 
-  function openProfile(id: number) {
+  const openProfile = useCallback(async (id: number) => {
     setSelectedId(id);
     setRoute('profile');
-  }
+    setProfileMember(null);
+    try {
+      const fresh = await getMember(id);
+      setProfileMember(fresh);
+    } catch (err) {
+      notifyError(err, 'Failed to load member details.');
+    }
+  }, []);
 
   function openEdit(id: number) {
     setSelectedId(id);
@@ -136,7 +148,6 @@ export function App() {
                   onNewMember={() => setRoute('register')}
                   onViewMember={openProfile}
                   onEditMember={openEdit}
-                  families={families}
                   onOpenFamily={openMemberFamily}
                 />
               )}
@@ -179,22 +190,22 @@ export function App() {
                 />
               )}
 
-              {route === 'profile' && selectedMember && (
+              {route === 'profile' && profileMember && (
                 <MemberProfile
-                  member={selectedMember}
+                  member={profileMember}
                   onEdit={() => setRoute('edit')}
                   onBack={() => setRoute('directory')}
                 />
               )}
 
-              {route === 'profile' && !selectedMember && loading && (
+              {route === 'profile' && !profileMember && (
                 <MemberProfileSkeleton onBack={() => setRoute('directory')} />
               )}
 
-              {route === 'edit' && selectedMember && (
+              {route === 'edit' && (profileMember ?? selectedMember) && (
                 <MemberForm
-                  member={selectedMember}
-                  onSubmit={(data) => editMember(selectedMember.id, data)}
+                  member={(profileMember ?? selectedMember)!}
+                  onSubmit={(data) => editMember((profileMember ?? selectedMember)!.id, data)}
                   onSuccess={(saved) => openProfile(saved.id)}
                   onCancel={() => setRoute('profile')}
                 />

@@ -1,5 +1,29 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
+// Derived once from the configured API base, e.g.
+// "https://church-registration.duckdns.org/api/v1" -> "https://church-registration.duckdns.org".
+const API_ORIGIN = new URL(API_BASE_URL, window.location.origin).origin;
+
+// Some backend-generated asset URLs (e.g. a member's picture_url before it's
+// mirrored to the CDN) come back stamped with the backend's own local dev
+// APP_URL ("http://localhost:8000") rather than its public host — a value
+// that isn't reachable from wherever this app is actually being viewed, so
+// the image silently fails to load. This swaps in the real API origin for
+// just that case; a URL already on a real host (the CDN mirror, or a
+// same-origin dev backend) is returned unchanged.
+export function resolveMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+      return `${API_ORIGIN}${parsed.pathname}${parsed.search}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 // ── Auth token plumbing ───────────────────────────────────────────────────────
 // Nearly every route in routes/api.php sits behind the auth:sanctum middleware,
 // so every request needs a Bearer token once the user is signed in. Kept here
@@ -183,3 +207,51 @@ export const apiPatch = <T>(path: string, body: unknown): Promise<T> =>
 // undefined — so callers typically use apiDelete<void>.
 export const apiDelete = <T>(path: string): Promise<T> =>
   request<T>(path, { method: 'DELETE' });
+
+export interface DownloadResult {
+  blob: Blob;
+  filename: string;
+}
+
+// For endpoints that return a binary file (e.g. the members Excel export)
+// instead of JSON — reads the raw response body as a Blob rather than calling
+// response.json(). The server names the file via Content-Disposition, but
+// that header is only readable here if the backend sends
+// `Access-Control-Expose-Headers: Content-Disposition` on a cross-origin
+// response; if it doesn't (or on same-origin dev setups this rarely matters),
+// fall back to the caller-supplied name instead of leaving the file untitled.
+export async function apiDownload(path: string, fallbackFilename: string): Promise<DownloadResult> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    let errors: Record<string, string[]> | undefined;
+    try {
+      const body: unknown = await response.json();
+      if (typeof body === 'object' && body !== null) {
+        const record = body as Record<string, unknown>;
+        if (typeof record.message === 'string') message = record.message;
+        if (typeof record.errors === 'object' && record.errors !== null) {
+          errors = record.errors as Record<string, string[]>;
+        }
+      }
+    } catch {
+      // Response had no JSON body to read a message from.
+    }
+    if (response.status === 401) {
+      onUnauthorized?.();
+    }
+    throw new ApiError(message, response.status, errors);
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  const filename = match?.[1] ? decodeURIComponent(match[1]) : fallbackFilename;
+
+  return { blob: await response.blob(), filename };
+}
