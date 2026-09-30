@@ -72,6 +72,18 @@ export interface MemberChurchResponsibility extends NamedLookup {
   department_id?: number | null;
 }
 
+// One family this member belongs to, as reported inline on MemberResource
+// (role_type is "father"/"mother"/"child" etc., matching FamilyMember).
+export interface MemberFamilyMembership {
+  family_id: number;
+  family_name: string;
+  address: string | null;
+  date_formed: string | null;
+  role_type: string;
+  start_date: string | null;
+  end_date: string | null;
+}
+
 export interface Member {
   id: number;
   first_name: string;
@@ -103,6 +115,14 @@ export interface Member {
   cellule_id: number | null;
   cell_id: number | null;
   village_id: number | null;
+  // Every family this member is linked to (as father/mother/child/etc).
+  families: MemberFamilyMembership[];
+  // [true, family_id] when this member is the father of a family (i.e. heads
+  // one), otherwise [false, 0].
+  has_family: [boolean, number];
+  // [true, family_id] when this member is a child in a family (the family
+  // they were born into), otherwise [false, 0].
+  has_birth_family: [boolean, number];
 }
 
 // ── Query params accepted by GET /v1/members (FilterMemberRequest) ───────────

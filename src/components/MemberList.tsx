@@ -1,10 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Member, MemberFilters } from '../types/member';
-import type { Family } from '../types/family';
 import { Icon } from './Layout';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS } from '../data/constants';
 import { MemberFiltersPanel } from './form/MemberFilters';
-import { getMembersPage } from '../api/members';
+import { getMembersPage, exportMembers } from '../api/members';
+import { resolveMediaUrl } from '../api/client';
+import { notifyError } from '../notify';
+
+// Saves a fetched Blob to disk via a throwaway <a download> link — the
+// standard way to trigger a "Save As" for data that only exists in memory
+// (there's no navigable URL for it, since it came back from an authenticated
+// fetch rather than a plain link the browser could follow itself).
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 interface DirectoryProps {
   members: Member[];
@@ -15,24 +31,36 @@ interface DirectoryProps {
   onNewMember: () => void;
   onViewMember: (id: number) => void;
   onEditMember: (id: number) => void;
-  // Families data for the "Has Family" column (per the "add family shortcuts
-  // to the member list" request) — Family creation itself only happens from
-  // the Families tab's own "New Family" button, or the prompt shown right
-  // after registering a married member.
-  families: Family[];
+  // Opens the Families tab straight on the given family's detail view — used
+  // by the "Family"/"Birth Family" action buttons below, which read directly
+  // off the member's own has_family/has_birth_family fields (MemberResource
+  // now reports these inline, so there's no need to cross-reference a
+  // separately-fetched families list here anymore).
   onOpenFamily: (familyId: number) => void;
 }
 
-// Finds the family (if any) this member belongs to, and the role they hold in
-// it — MemberResource doesn't expose a family relationship directly, so this
-// is resolved by scanning the separately-fetched families list for a matching
-// member_id in each family's `members` array.
-function familyInfoFor(member: Member, families: Family[]): { family: Family; roleType: string } | null {
-  for (const family of families) {
-    const entry = family.members.find((m) => m.member_id === member.id);
-    if (entry) return { family, roleType: entry.role_type };
-  }
-  return null;
+interface FamilyLinkButtonProps {
+  label: string;
+  tooltip: string;
+  icon: string;
+  familyId: number;
+  onOpen: (familyId: number) => void;
+}
+
+// A "Has Family" or "Birth Family" action button — only rendered at all when
+// the member actually has that link (see the row below), so it's always a
+// live, clickable pill that jumps straight to the family's detail view.
+function FamilyLinkButton({ label, tooltip, icon, familyId, onOpen }: FamilyLinkButtonProps) {
+  return (
+    <button
+      type="button"
+      className="family-action linked"
+      onClick={() => onOpen(familyId)}
+      title={tooltip}
+    >
+      <Icon name={icon} size={12} /> {label}
+    </button>
+  );
 }
 
 const PAGE_SIZE = 5;
@@ -65,14 +93,26 @@ export function MemberList({
   onNewMember,
   onViewMember,
   onEditMember,
-  families,
   onOpenFamily,
 }: DirectoryProps) {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const activeFilterCount = countActiveFilters(filters);
   const filtersRef = useRef<HTMLDivElement>(null);
   const isSearching = search.trim() !== '';
+
+  async function handleExport(): Promise<void> {
+    setExporting(true);
+    try {
+      const { blob, filename } = await exportMembers(filters);
+      downloadBlob(blob, filename);
+    } catch (err) {
+      notifyError(err, 'Failed to export members.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     if (!showFilters) return;
@@ -205,6 +245,23 @@ export function MemberList({
                 />
               )}
             </div>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={handleExport}
+              disabled={exporting}
+              title={
+                activeFilterCount > 0
+                  ? `Export the ${activeFilterCount} applied filter${activeFilterCount === 1 ? '' : 's'} to Excel`
+                  : 'Export all members to Excel'
+              }
+            >
+              {exporting ? (
+                <><span className="spinner" aria-hidden="true" /> Exporting…</>
+              ) : (
+                <><Icon name="download" size={12} /> Export</>
+              )}
+            </button>
             <button className="btn btn-primary btn-sm" onClick={onNewMember}>
               <Icon name="plus" size={12} /> New Member
             </button>
@@ -239,13 +296,12 @@ export function MemberList({
                   <th>Phone</th>
                   <th>Departments</th>
                   <th>Employed</th>
-                  <th>Has Family</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {pagedMembers.map((m) => {
-                  const familyInfo = familyInfoFor(m, families);
+                  const pictureUrl = resolveMediaUrl(m.picture_url);
                   return (
                   <tr key={m.id}>
                     <td>
@@ -253,12 +309,12 @@ export function MemberList({
                         <div
                           className="avatar"
                           style={
-                            m.picture_url
-                              ? { backgroundImage: `url(${m.picture_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                            pictureUrl
+                              ? { backgroundImage: `url(${pictureUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                               : undefined
                           }
                         >
-                          {!m.picture_url && initials(m)}
+                          {!pictureUrl && initials(m)}
                         </div>
                         <div>
                           <div className="name">{m.first_name} {m.last_name}</div>
@@ -279,30 +335,30 @@ export function MemberList({
                       <span className={'tag ' + (m.employed ? 'green' : '')}>{m.employed === null ? '—' : m.employed ? 'Yes' : 'No'}</span>
                     </td>
                     <td>
-                      {familyInfo ? (
-                        <button
-                          type="button"
-                          onClick={() => onOpenFamily(familyInfo.family.id)}
-                          title={familyInfo.family.family_name}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            cursor: 'pointer',
-                            fontSize: 14,
-                            fontWeight: 700,
-                            color: 'var(--success)',
-                            textDecoration: 'underline',
-                          }}
-                        >
-                          Yes
-                        </button>
-                      ) : (
-                        <span style={{ color: 'var(--cream-faint)' }}>No</span>
-                      )}
-                    </td>
-                    <td>
                       <div className="row-actions">
+                        {m.has_family[0] && (
+                          <FamilyLinkButton
+                            label="Has Family"
+                            tooltip="View family details"
+                            icon="home"
+                            familyId={m.has_family[1]}
+                            onOpen={onOpenFamily}
+                          />
+                        )}
+                        {m.has_birth_family[0] && (
+                          <FamilyLinkButton
+                            label="Birth Family"
+                            tooltip="View birth family details"
+                            icon="sprout"
+                            familyId={m.has_birth_family[1]}
+                            onOpen={onOpenFamily}
+                          />
+                        )}
+                        {!m.has_family[0] && !m.has_birth_family[0] && (
+                          <span className="family-action unlinked" title="No family linked to this member.">
+                            <Icon name="home" size={12} /> No Family
+                          </span>
+                        )}
                         <button
                           type="button"
                           className="icon-btn"
@@ -328,7 +384,7 @@ export function MemberList({
                 })}
                 {pagedMembers.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--cream-faint)', padding: '32px 0' }}>
                       {isSearching ? 'No members match your search.' : 'No members found.'}
                     </td>
                   </tr>

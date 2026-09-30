@@ -7,7 +7,7 @@ import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/const
 import { MultiSelectChecklist } from './form/MultiSelectChecklist';
 import { EducationEntries } from './form/EducationEntries';
 import { DepartmentEntries } from './form/DepartmentEntries';
-import { ApiError } from '../api/client';
+import { ApiError, resolveMediaUrl } from '../api/client';
 
 interface MemberFormProps {
   member?: Member;
@@ -252,13 +252,24 @@ function Stepper({
   setStep: (n: number) => void;
   isComplete: (id: number) => boolean;
 }) {
+  // Jumping backward is always allowed; jumping forward requires every step
+  // in between to be complete, so users can't skip past unresolved errors.
+  function canReach(id: number): boolean {
+    if (id <= current) return true;
+    for (let s = current; s < id; s++) {
+      if (!isComplete(s)) return false;
+    }
+    return true;
+  }
+
   return (
     <div className="stepper">
       {STEPS.map((s) => {
         const done = isComplete(s.id) && s.id !== current;
-        const cls = s.id === current ? 'active' : done ? 'done' : '';
+        const reachable = canReach(s.id);
+        const cls = (s.id === current ? 'active' : done ? 'done' : '') + (reachable ? '' : ' locked');
         return (
-          <div key={s.id} className={'step ' + cls} onClick={() => setStep(s.id)}>
+          <div key={s.id} className={'step ' + cls} onClick={() => reachable && setStep(s.id)}>
             <div className="step-dot">
               {done ? <Icon name="check" size={18} /> : String(s.id).padStart(2, '0')}
             </div>
@@ -288,7 +299,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   // Local preview for the picture — either a freshly chosen file (object URL,
   // revoked on change/unmount) or the member's existing picture_url when editing.
   const [pictureError, setPictureError] = useState<string | null>(null);
-  const [picturePreview, setPicturePreview] = useState<string | null>(member?.picture_url ?? null);
+  const [picturePreview, setPicturePreview] = useState<string | null>(resolveMediaUrl(member?.picture_url));
   const objectUrlRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -306,7 +317,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
         URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = null;
       }
-      setPicturePreview(member?.picture_url ?? null);
+      setPicturePreview(resolveMediaUrl(member?.picture_url));
       return;
     }
     if (!ACCEPTED_PICTURE_TYPES.includes(file.type)) {
@@ -373,7 +384,9 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
     setSubmitError(null);
     setFieldErrors({});
     try {
-      const saved = await onSubmit(toPayload(form));
+      const payload = toPayload(form);
+      console.log('member payload', payload);
+      const saved = await onSubmit(payload);
       onSuccess(saved);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -836,7 +849,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
             {submitting ? 'Saving…' : <>{isEditing ? 'Save Changes' : 'Submit Registration'} <Icon name="check" size={14} /></>}
           </button>
         ) : (
-          <button className="btn btn-primary" onClick={() => setStep(step + 1)}>
+          <button className="btn btn-primary" onClick={() => setStep(step + 1)} disabled={!isStepComplete(step)}>
             Next Step <Icon name="arrow" size={14} />
           </button>
         )}
