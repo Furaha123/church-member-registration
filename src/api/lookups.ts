@@ -16,6 +16,11 @@ export const getSpiritualGifts = (): Promise<NamedLookup[]> => apiGet('/members/
 export const getEducations = (): Promise<NamedLookup[]> => apiGet('/members/educations');
 export const getDepartments = (): Promise<NamedLookup[]> => apiGet('/members/departments');
 
+// List of churches (for the "which church do they belong to" field shown when
+// a member is marked as not an official member of this church, i.e. a
+// visitor/attendee) — GET /churches, read-only like the other lookups above.
+export const getChurches = (): Promise<NamedLookup[]> => apiGet('/churches');
+
 export const getFacultiesForEducation = (educationId: number): Promise<NamedLookup[]> =>
   apiGet(`/members/educations/${educationId}/faculties`);
 

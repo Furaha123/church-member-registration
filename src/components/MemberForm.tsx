@@ -34,6 +34,9 @@ interface FormState {
   occupation: number[];
   education: EducationEntry[];
   employed: '' | 'yes' | 'no';
+  is_member: 'yes' | 'no';
+  attends_sunday_school: 'yes' | 'no';
+  church_id: number | '';
   mobile_tel: string;
   email: string;
   province_id: number | '';
@@ -98,8 +101,19 @@ function isNotFuture(date: string): boolean {
   return date === '' || date <= TODAY_ISO;
 }
 
-function isOnOrAfterBirth(date: string, birthDate: string): boolean {
-  return date === '' || birthDate === '' || date >= birthDate;
+// Drives whether the "Attends Sunday School?" field shows at all — the
+// backend documents that field as being for members "typically under 19".
+function calculateAge(dateStr: string): number | null {
+  if (!dateStr) return null;
+  const dob = new Date(dateStr);
+  if (Number.isNaN(dob.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+  return age;
 }
 
 const STEPS = [
@@ -143,6 +157,11 @@ function initialFormState(member?: Member): FormState {
       ),
     })) ?? [],
     employed: member?.employed === true ? 'yes' : member?.employed === false ? 'no' : '',
+    // Both default the way the backend does when the field is omitted:
+    // is_member defaults true (official member), attends_sunday_school false.
+    is_member: member?.is_member === false ? 'no' : 'yes',
+    attends_sunday_school: member?.attends_sunday_school === true ? 'yes' : 'no',
+    church_id: member?.church_id ?? '',
     mobile_tel: member?.mobile_tel ?? '',
     email: member?.email ?? '',
     province_id: member?.province_id ?? '',
@@ -186,6 +205,9 @@ function toPayload(form: FormState): MemberPayload {
   if (form.fathers_name.trim()) payload.fathers_name = form.fathers_name.trim();
   if (form.mothers_name.trim()) payload.mothers_name = form.mothers_name.trim();
   if (form.employed) payload.employed = form.employed === 'yes';
+  payload.is_member = form.is_member === 'yes';
+  payload.attends_sunday_school = form.attends_sunday_school === 'yes';
+  if (form.is_member === 'no' && form.church_id) payload.church_id = Number(form.church_id);
   if (form.occupation.length > 0) payload.occupation = form.occupation;
   if (form.education.length > 0) payload.education = form.education;
   if (form.department.length > 0) payload.department = form.department;
@@ -294,6 +316,7 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
   const talentOptions = lookups.talents;
   const giftOptions = lookups.spiritualGifts;
   const occupationOptions = lookups.occupations;
+  const churchOptions = lookups.churches;
 
   const geo = useGeographyCascade(form.province_id, form.district_id, form.sector_id, form.cellule_id);
 
@@ -340,16 +363,40 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  const age = calculateAge(form.date_birthday);
+  const showsSundaySchool = age !== null && age < 19;
+
+  // If the date of birth changes so the person's no longer under 19, don't
+  // silently keep submitting a stale "attends Sunday school" answer for a
+  // field that's no longer even shown.
+  useEffect(() => {
+    if (!showsSundaySchool && form.attends_sunday_school === 'yes') {
+      set('attends_sunday_school', 'no');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showsSundaySchool]);
+
+  // The "which church do they belong to" field only makes sense for a
+  // visitor/attendee — clear it if they're toggled back to being an official
+  // member so a stale selection doesn't linger unseen.
+  useEffect(() => {
+    if (form.is_member === 'yes' && form.church_id !== '') {
+      set('church_id', '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.is_member]);
+
   const isEditing = Boolean(member);
   const mobileValid = form.mobile_tel.trim() === '' || PHONE_PATTERN.test(form.mobile_tel.trim());
   const emailValid = form.email.trim() === '' || EMAIL_PATTERN.test(form.email.trim());
   const nationalIdValid = form.national_id.trim() === '' || NATIONAL_ID_PATTERN.test(form.national_id.trim());
   const dobValid = isNotFuture(form.date_birthday);
-  const salvationValid =
-    isNotFuture(form.date_salvation) && isOnOrAfterBirth(form.date_salvation, form.date_birthday);
-  const baptismValid = isNotFuture(form.date_baptism) && isOnOrAfterBirth(form.date_baptism, form.date_birthday);
-  const memberSinceValid =
-    isNotFuture(form.member_since) && isOnOrAfterBirth(form.member_since, form.date_birthday);
+  // Only "not in the future" is enforced here — these dates are allowed to
+  // predate the date of birth, since a record's dates aren't always entered
+  // in a perfectly consistent order and that shouldn't block saving.
+  const salvationValid = isNotFuture(form.date_salvation);
+  const baptismValid = isNotFuture(form.date_baptism);
+  const memberSinceValid = isNotFuture(form.member_since);
   const datesValid = dobValid && salvationValid && baptismValid && memberSinceValid;
   const requiredFilled =
     form.first_name.trim().length > 0 &&
@@ -472,6 +519,40 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                 <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
               )}
             </Field>
+            <Field label="Is Church Member?" span={4} hint="No = visitor/attendee">
+              <select
+                className="select"
+                value={form.is_member}
+                onChange={(e) => set('is_member', e.target.value as FormState['is_member'])}
+              >
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </Field>
+            {form.is_member === 'no' && (
+              <Field label="Their Church" span={4} hint="which church they belong to">
+                <select
+                  className="select"
+                  value={form.church_id}
+                  onChange={(e) => set('church_id', e.target.value === '' ? '' : Number(e.target.value))}
+                >
+                  <option value="">Select church…</option>
+                  {churchOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
+            )}
+            {showsSundaySchool && (
+              <Field label="Attends Sunday School?" span={4}>
+                <select
+                  className="select"
+                  value={form.attends_sunday_school}
+                  onChange={(e) => set('attends_sunday_school', e.target.value as FormState['attends_sunday_school'])}
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </Field>
+            )}
             <Field label="National ID" span={8} hint="16 digits">
               <input
                 className="input"
@@ -499,45 +580,36 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
               <input
                 className="input"
                 type="date"
-                min={form.date_birthday || undefined}
                 max={TODAY_ISO}
                 value={form.date_salvation}
                 onChange={(e) => set('date_salvation', e.target.value)}
               />
               {!salvationValid && (
-                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
-                  {isNotFuture(form.date_salvation) ? "Can't be before the date of birth." : "Can't be in the future."}
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
               )}
             </Field>
             <Field label="Date of Baptism" span={4}>
               <input
                 className="input"
                 type="date"
-                min={form.date_birthday || undefined}
                 max={TODAY_ISO}
                 value={form.date_baptism}
                 onChange={(e) => set('date_baptism', e.target.value)}
               />
               {!baptismValid && (
-                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
-                  {isNotFuture(form.date_baptism) ? "Can't be before the date of birth." : "Can't be in the future."}
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
               )}
             </Field>
             <Field label="Member Since" span={4}>
               <input
                 className="input"
                 type="date"
-                min={form.date_birthday || undefined}
                 max={TODAY_ISO}
                 value={form.member_since}
                 onChange={(e) => set('member_since', e.target.value)}
               />
               {!memberSinceValid && (
-                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>
-                  {isNotFuture(form.member_since) ? "Can't be before the date of birth." : "Can't be in the future."}
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Can't be in the future.</div>
               )}
             </Field>
 
@@ -771,6 +843,13 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                   ['Full Name', `${form.first_name || '—'} ${form.last_name || ''}`],
                   ['Gender', toDisplayLabel(SEX_OPTIONS.find((o) => o.id === form.sex_id)?.name ?? '—')],
                   ['Marital Status', toDisplayLabel(MARITAL_STATUS_OPTIONS.find((o) => o.id === form.marital_status_id)?.name ?? '—')],
+                  ['Church Member', form.is_member === 'yes' ? 'Yes' : 'No (visitor/attendee)'],
+                  ...(form.is_member === 'no'
+                    ? [['Their Church', churchOptions.find((c) => c.id === form.church_id)?.name ?? '—']]
+                    : []),
+                  ...(showsSundaySchool
+                    ? [['Attends Sunday School', form.attends_sunday_school === 'yes' ? 'Yes' : 'No']]
+                    : []),
                   ['Mobile', form.mobile_tel || '—'],
                   ['Talents', String(form.talent.length)],
                   ['Spiritual Gifts', String(form.spiritual_gift.length)],
@@ -796,9 +875,9 @@ export function MemberForm({ member, onSubmit, onSuccess, onCancel }: MemberForm
                     </div>
                   )}
                   {!dobValid && <div>Date of birth can't be in the future — please pick a valid date.</div>}
-                  {!salvationValid && <div>Date of salvation must be on/after the date of birth and not in the future (Personal step).</div>}
-                  {!baptismValid && <div>Date of baptism must be on/after the date of birth and not in the future (Personal step).</div>}
-                  {!memberSinceValid && <div>Member since must be on/after the date of birth and not in the future (Personal step).</div>}
+                  {!salvationValid && <div>Date of salvation can't be in the future (Personal step).</div>}
+                  {!baptismValid && <div>Date of baptism can't be in the future (Personal step).</div>}
+                  {!memberSinceValid && <div>Member since can't be in the future (Personal step).</div>}
                   {!nationalIdValid && <div>National ID must be exactly 16 digits (Personal step).</div>}
                   {!emailValid && <div>The email address isn't valid (check it on the Contact step).</div>}
                   {!mobileValid && <div>The mobile number has invalid characters — numbers only (Contact step).</div>}
