@@ -6,6 +6,7 @@ import {
   getEducations,
   getDepartments,
   getProvinces,
+  getChurches,
 } from '../api/lookups';
 import type { NamedLookup } from '../types/lookup';
 
@@ -16,6 +17,7 @@ interface UseLookupsReturn {
   educations: NamedLookup[];
   departments: NamedLookup[];
   provinces: NamedLookup[];
+  churches: NamedLookup[];
   loading: boolean;
   error: string | null;
 }
@@ -34,6 +36,7 @@ export function useLookups(): UseLookupsReturn {
   const [educations, setEducations] = useState<NamedLookup[]>([]);
   const [departments, setDepartments] = useState<NamedLookup[]>([]);
   const [provinces, setProvinces] = useState<NamedLookup[]>([]);
+  const [churches, setChurches] = useState<NamedLookup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,13 +47,14 @@ export function useLookups(): UseLookupsReturn {
       setLoading(true);
       setError(null);
       try {
-        const [occ, tal, gifts, edu, dept, prov] = await Promise.all([
+        const [occ, tal, gifts, edu, dept, prov, church] = await Promise.all([
           getOccupations(),
           getTalents(),
           getSpiritualGifts(),
           getEducations(),
           getDepartments(),
           getProvinces(),
+          getChurches(),
         ]);
         if (cancelled) return;
         setOccupations(occ);
@@ -59,6 +63,7 @@ export function useLookups(): UseLookupsReturn {
         setEducations(edu);
         setDepartments(dept);
         setProvinces(prov);
+        setChurches(church);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load form options.');
@@ -74,5 +79,5 @@ export function useLookups(): UseLookupsReturn {
     };
   }, []);
 
-  return { occupations, talents, spiritualGifts, educations, departments, provinces, loading, error };
+  return { occupations, talents, spiritualGifts, educations, departments, provinces, churches, loading, error };
 }

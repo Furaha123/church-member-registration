@@ -90,6 +90,10 @@ function buildMemberFormData(data: MemberPayload): FormData {
   if (data.mothers_name) form.append('mothers_name', data.mothers_name);
   if (data.national_id) form.append('national_id', data.national_id);
   if (data.employed !== undefined) form.append('employed', data.employed ? 'true' : 'false');
+  if (data.is_member !== undefined) form.append('is_member', data.is_member ? 'true' : 'false');
+  if (data.attends_sunday_school !== undefined) {
+    form.append('attends_sunday_school', data.attends_sunday_school ? 'true' : 'false');
+  }
   if (data.date_salvation) form.append('date_salvation', data.date_salvation);
   if (data.date_baptism) form.append('date_baptism', data.date_baptism);
   if (data.member_since) form.append('member_since', data.member_since);
@@ -104,6 +108,7 @@ function buildMemberFormData(data: MemberPayload): FormData {
   if (data.cellule_id !== undefined) form.append('cellule_id', String(data.cellule_id));
   if (data.cell_id !== undefined) form.append('cell_id', String(data.cell_id));
   if (data.village_id !== undefined) form.append('village_id', String(data.village_id));
+  if (data.church_id !== undefined) form.append('church_id', String(data.church_id));
   // The backend's multipart field for the upload is named `pictureFile`, not
   // `picture` (confirmed against the live API — POST/PUT /members request a
   // pictureFile field). `picture_url` on the response is a different, output-only

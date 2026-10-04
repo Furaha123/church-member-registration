@@ -28,6 +28,12 @@ export interface MemberPayload {
   mothers_name?: string;
   national_id?: string;
   employed?: boolean;
+  // Whether this person is an official church member (false = visitor/
+  // attendee). Backend defaults to true when omitted.
+  is_member?: boolean;
+  // Whether a member (typically under 19) attends Sunday school. Backend
+  // defaults to false when omitted.
+  attends_sunday_school?: boolean;
 
   // Optional key dates, format yyyy-mm-dd.
   date_salvation?: string;
@@ -52,6 +58,9 @@ export interface MemberPayload {
   cellule_id?: number;
   cell_id?: number;
   village_id?: number;
+  // Which church this person belongs to — relevant when is_member is false
+  // (a visitor/attendee from elsewhere).
+  church_id?: number;
 }
 
 // ── Shape returned by MemberResource (GET /v1/members, /v1/members/{id}) ─────
@@ -93,6 +102,8 @@ export interface Member {
   email: string | null;
   mobile_tel: string | null;
   employed: boolean | null;
+  is_member: boolean | null;
+  attends_sunday_school: boolean | null;
   fathers_name: string | null;
   mothers_name: string | null;
   national_id: string | null;
@@ -115,6 +126,7 @@ export interface Member {
   cellule_id: number | null;
   cell_id: number | null;
   village_id: number | null;
+  church_id: number | null;
   // Every family this member is linked to (as father/mother/child/etc).
   families: MemberFamilyMembership[];
   // [true, family_id] when this member is the father of a family (i.e. heads

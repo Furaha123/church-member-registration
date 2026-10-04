@@ -9,6 +9,7 @@ import {
   getCellulesForSector,
   getVillagesForCellule,
   getProvinces,
+  getChurches,
 } from '../api/lookups';
 
 interface MemberProfileProps {
@@ -114,7 +115,7 @@ function PairedGroup({ label, parents, childrenOf, tone = 'neutral' }: PairedGro
  * so this walks the chain the member already has ids for and matches by id.
  */
 function useGeographyNames(member: Member) {
-  const [names, setNames] = useState({ province: '—', district: '—', sector: '—', cellule: '—', village: '—' });
+  const [names, setNames] = useState({ province: '—', district: '—', sector: '—', cellule: '—', village: '—', church: '—' });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -122,7 +123,7 @@ function useGeographyNames(member: Member) {
     setLoading(true);
 
     async function resolve() {
-      const next = { province: '—', district: '—', sector: '—', cellule: '—', village: '—' };
+      const next = { province: '—', district: '—', sector: '—', cellule: '—', village: '—', church: '—' };
       try {
         if (member.province_id) {
           const provinces = await getProvinces();
@@ -144,6 +145,10 @@ function useGeographyNames(member: Member) {
           const villages = await getVillagesForCellule(member.cellule_id);
           next.village = villages.find((v) => v.id === member.village_id)?.name ?? '—';
         }
+        if (member.church_id) {
+          const churches = await getChurches();
+          next.church = churches.find((c) => c.id === member.church_id)?.name ?? '—';
+        }
       } catch {
         // Leave whatever was resolved so far; geography display degrades to '—'.
       }
@@ -155,7 +160,7 @@ function useGeographyNames(member: Member) {
 
     void resolve();
     return () => { cancelled = true; };
-  }, [member.province_id, member.district_id, member.sector_id, member.cellule_id, member.village_id]);
+  }, [member.province_id, member.district_id, member.sector_id, member.cellule_id, member.village_id, member.church_id]);
 
   return { ...names, loading };
 }
@@ -273,6 +278,16 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
             <DetailRow label="Father's Name" value={member.fathers_name ?? ''} />
             <DetailRow label="Mother's Name" value={member.mothers_name ?? ''} />
             <DetailRow label="Employed" value={member.employed === null ? '—' : member.employed ? 'Yes' : 'No'} />
+            <DetailRow
+              label="Church Member"
+              value={member.is_member === false ? 'No (visitor/attendee)' : 'Yes'}
+            />
+            {member.is_member === false && (
+              <DetailRow label="Their Church" value={geoNames.church} />
+            )}
+            {member.attends_sunday_school !== null && member.attends_sunday_school && (
+              <DetailRow label="Attends Sunday School" value="Yes" />
+            )}
           </div>
 
           <div>
