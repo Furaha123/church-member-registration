@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Member } from '../types/member';
+import type { RoleType } from '../types/family';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS, CELL_OPTIONS } from '../data/constants';
 import { resolveMediaUrl } from '../api/client';
 import { toDisplayLabel } from '../utils/format';
+import { roleLabel, roleTone } from '../utils/familyRoles';
+import { Icon } from './Layout';
 import {
   getDistrictsForProvince,
   getSectorsForDistrict,
@@ -16,6 +19,11 @@ interface MemberProfileProps {
   member: Member;
   onEdit: () => void;
   onBack: () => void;
+  // Opens the Families tab on one of this member's families. Every family
+  // membership (father/mother/guardian/child, active or ended) is listed
+  // below — the member list's quick-link buttons only ever point at an
+  // active one, but this profile view has room to show the full history.
+  onOpenFamily: (familyId: number) => void;
 }
 
 function lookupName(options: { id: number; name: string }[], id: number | null): string {
@@ -233,7 +241,7 @@ export function MemberProfileSkeleton({ onBack }: { onBack: () => void }) {
   );
 }
 
-export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
+export function MemberProfile({ member, onEdit, onBack, onOpenFamily }: MemberProfileProps) {
   const geoNames = useGeographyNames(member);
   const educationPaired = hasReliableEducationPairing(member);
   const departmentPaired = hasReliableDepartmentPairing(member);
@@ -345,6 +353,57 @@ export function MemberProfile({ member, onEdit, onBack }: MemberProfileProps) {
               </>
             )}
           </div>
+        </div>
+
+        <div style={{ marginTop: 8 }}>
+          <div className="section-title" style={{ marginTop: 24 }}><h3>Families</h3></div>
+          {member.families.length === 0 ? (
+            <div style={{ fontSize: 14, color: 'var(--cream-faint)', padding: '12px 0' }}>
+              Not linked to any family yet.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="member-table">
+                <thead>
+                  <tr>
+                    <th>Family</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {member.families.map((f) => (
+                    <tr key={`${f.family_id}-${f.role_type}-${f.start_date ?? ''}`}>
+                      <td>
+                        <div className="name">{f.family_name}</div>
+                        <div className="id-num">#{f.family_id}</div>
+                      </td>
+                      <td>
+                        <span className={'tag ' + roleTone(f.role_type as RoleType)}>{roleLabel(f.role_type as RoleType)}</span>
+                      </td>
+                      <td>{f.end_date ? 'Ended' : 'Active'}</td>
+                      <td>{f.start_date || '—'}</td>
+                      <td>{f.end_date || '—'}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => onOpenFamily(f.family_id)}
+                          aria-label={`View ${f.family_name}`}
+                          title="View family details"
+                        >
+                          <Icon name="eye" size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

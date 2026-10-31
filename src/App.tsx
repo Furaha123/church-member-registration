@@ -195,6 +195,7 @@ export function App() {
                   member={profileMember}
                   onEdit={() => setRoute('edit')}
                   onBack={() => setRoute('directory')}
+                  onOpenFamily={openMemberFamily}
                 />
               )}
 
