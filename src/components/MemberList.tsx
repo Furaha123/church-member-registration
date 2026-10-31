@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Member, MemberFilters } from '../types/member';
+import type { Member, MemberFamilyMembership, MemberFilters } from '../types/member';
 import { Icon } from './Layout';
 import { SEX_OPTIONS, MARITAL_STATUS_OPTIONS } from '../data/constants';
 import { MemberFiltersPanel } from './form/MemberFilters';
@@ -7,6 +7,8 @@ import { getMembersPage, exportMembers } from '../api/members';
 import { resolveMediaUrl } from '../api/client';
 import { notifyError } from '../notify';
 import { toDisplayLabel } from '../utils/format';
+import { roleLabel, roleIcon } from '../utils/familyRoles';
+import type { RoleType } from '../types/family';
 
 // Saves a fetched Blob to disk via a throwaway <a download> link — the
 // standard way to trigger a "Save As" for data that only exists in memory
@@ -33,10 +35,11 @@ interface DirectoryProps {
   onViewMember: (id: number) => void;
   onEditMember: (id: number) => void;
   // Opens the Families tab straight on the given family's detail view — used
-  // by the "Family"/"Birth Family" action buttons below, which read directly
-  // off the member's own has_family/has_birth_family fields (MemberResource
-  // now reports these inline, so there's no need to cross-reference a
-  // separately-fetched families list here anymore).
+  // by the per-family action buttons below. These are derived from the
+  // member's own `families` list rather than the backend's has_family/
+  // has_birth_family flags: has_family only checks a FATHER role (never
+  // MOTHER or GUARDIAN), so a woman heading her own family — or anyone
+  // belonging to more than two families at once — would otherwise be missed.
   onOpenFamily: (familyId: number) => void;
 }
 
@@ -84,6 +87,12 @@ function initials(m: Member): string {
 
 function namesOf(list: { name: string }[]): string {
   return list.length > 0 ? list.map((l) => l.name).join(', ') : '—';
+}
+
+// Every family this member is currently (not formerly) linked to, in any
+// role — father/mother/guardian/child, no limit on how many.
+function activeFamilies(member: Member): MemberFamilyMembership[] {
+  return member.families.filter((f) => !f.end_date);
 }
 
 export function MemberList({
@@ -305,6 +314,7 @@ export function MemberList({
               <tbody>
                 {pagedMembers.map((m) => {
                   const pictureUrl = resolveMediaUrl(m.picture_url);
+                  const linkedFamilies = activeFamilies(m);
                   return (
                   <tr key={m.id}>
                     <td>
@@ -332,25 +342,18 @@ export function MemberList({
                     </td>
                     <td>
                       <div className="row-actions">
-                        {m.has_family[0] && (
-                          <FamilyLinkButton
-                            label="Has Family"
-                            tooltip="View family details"
-                            icon="home"
-                            familyId={m.has_family[1]}
-                            onOpen={onOpenFamily}
-                          />
-                        )}
-                        {m.has_birth_family[0] && (
-                          <FamilyLinkButton
-                            label="Birth Family"
-                            tooltip="View birth family details"
-                            icon="sprout"
-                            familyId={m.has_birth_family[1]}
-                            onOpen={onOpenFamily}
-                          />
-                        )}
-                        {!m.has_family[0] && !m.has_birth_family[0] && (
+                        {linkedFamilies.length > 0 ? (
+                          linkedFamilies.map((f) => (
+                            <FamilyLinkButton
+                              key={f.family_id}
+                              label={roleLabel(f.role_type as RoleType)}
+                              tooltip={`View ${f.family_name}`}
+                              icon={roleIcon(f.role_type as RoleType)}
+                              familyId={f.family_id}
+                              onOpen={onOpenFamily}
+                            />
+                          ))
+                        ) : (
                           <span className="family-action unlinked" title="No family linked to this member.">
                             <Icon name="home" size={12} /> No Family
                           </span>

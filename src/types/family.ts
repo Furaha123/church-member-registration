@@ -11,6 +11,11 @@ export interface FamilyMember {
   member_id: number;
   first_name: string;
   last_name: string;
+  // Whether this person is an official church member (false = visitor/attendee).
+  is_member: boolean;
+  // Which church they belong to, when is_member is false. Null for an
+  // official member of this church.
+  church_id: number | null;
   role_type: RoleType;
   start_date: string | null;
   end_date: string | null;

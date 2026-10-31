@@ -1,4 +1,7 @@
-import type { Family, RoleType } from '../types/family';
+import { useEffect, useState } from 'react';
+import type { Family } from '../types/family';
+import { getChurches } from '../api/lookups';
+import { roleLabel, roleTone } from '../utils/familyRoles';
 import { Icon } from './Layout';
 
 interface FamilyDetailProps {
@@ -7,17 +10,29 @@ interface FamilyDetailProps {
   onBack: () => void;
 }
 
-function roleTone(role: RoleType): string {
-  if (role === 'father' || role === 'mother') return 'gold';
-  if (role === 'guardian') return 'blue';
-  return '';
-}
+// Resolves church_id -> name for display, same lookup MemberProfile uses to
+// show "Their Church" for a visitor/attendee.
+function useChurchNames(): Map<number, string> {
+  const [names, setNames] = useState<Map<number, string>>(new Map());
 
-function roleLabel(role: RoleType): string {
-  return role.charAt(0).toUpperCase() + role.slice(1);
+  useEffect(() => {
+    let cancelled = false;
+    getChurches()
+      .then((churches) => {
+        if (!cancelled) setNames(new Map(churches.map((c) => [c.id, c.name])));
+      })
+      .catch(() => {
+        // Leave church names unresolved; display falls back to '—'.
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  return names;
 }
 
 export function FamilyDetail({ family, onEdit, onBack }: FamilyDetailProps) {
+  const churchNames = useChurchNames();
+
   return (
     <div>
       <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ marginBottom: 20 }}>
@@ -64,6 +79,8 @@ export function FamilyDetail({ family, onEdit, onBack }: FamilyDetailProps) {
                   <tr>
                     <th>Member</th>
                     <th>Role</th>
+                    <th>Church Member</th>
+                    <th>Their Church</th>
                     <th>Start Date</th>
                     <th>End Date</th>
                   </tr>
@@ -78,6 +95,8 @@ export function FamilyDetail({ family, onEdit, onBack }: FamilyDetailProps) {
                       <td>
                         <span className={'tag ' + roleTone(m.role_type)}>{roleLabel(m.role_type)}</span>
                       </td>
+                      <td>{m.is_member ? 'Yes' : 'No (visitor/attendee)'}</td>
+                      <td>{!m.is_member && m.church_id ? churchNames.get(m.church_id) ?? '—' : '—'}</td>
                       <td>{m.start_date || '—'}</td>
                       <td>{m.end_date || '—'}</td>
                     </tr>
